@@ -1,14 +1,14 @@
 import { CommonModule } from "@angular/common";
-import { Component, computed, signal } from "@angular/core";
+import { Component, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { firstValueFrom } from "rxjs";
 import { ApiService } from "./api.service";
 import { BidderRow, EventRow, ItemRow, WinningBidRow } from "./api.types";
 
 @Component({
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
+    standalone: true,
+    imports: [CommonModule, FormsModule],
+    template: `
     <div class="grid">
       <div class="card">
         <h2>Events</h2>
@@ -167,155 +167,154 @@ import { BidderRow, EventRow, ItemRow, WinningBidRow } from "./api.types";
   `,
 })
 export class DashboardComponent {
-  busy = signal(false);
-  error = signal<string | null>(null);
-  ok = signal<string | null>(null);
+    busy = signal(false);
+    error = signal<string | null>(null);
+    ok = signal<string | null>(null);
 
-  events = signal<EventRow[]>([]);
-  bidders = signal<BidderRow[]>([]);
-  items = signal<ItemRow[]>([]);
-  winningBids = signal<WinningBidRow[]>([]);
+    events = signal<EventRow[]>([]);
+    bidders = signal<BidderRow[]>([]);
+    items = signal<ItemRow[]>([]);
+    winningBids = signal<WinningBidRow[]>([]);
 
-  selectedEventId = signal<number | null>(null);
+    selectedEventId = signal<number | null>(null);
 
-  eventSearch = "";
-  newEventDesc = "";
-  newEventDate = "";
-  newEventTaxId = "";
+    eventSearch = "";
+    newEventDesc = "";
+    newEventDate = "";
+    newEventTaxId = "";
 
-  newBidderNum = "";
-  newBidderFirst = "";
-  newBidderLast = "";
-  newBidderEmail = "";
+    newBidderNum = "";
+    newBidderFirst = "";
+    newBidderLast = "";
+    newBidderEmail = "";
 
-  newItemType: "Live" | "Not Live" = "Live";
-  newItemDesc = "";
-  newItemNotes = "";
+    newItemType: "Live" | "Not Live" = "Live";
+    newItemDesc = "";
+    newItemNotes = "";
 
-  newWinningBidderId: number | null = null;
-  newWinningItemId: number | null = null;
-  newWinningAmount = "";
+    newWinningBidderId: number | null = null;
+    newWinningItemId: number | null = null;
+    newWinningAmount = "";
 
-  constructor(private api: ApiService) {
-    void this.refreshEvents();
-  }
-
-  async refreshEvents() {
-    await this.run(async () => {
-      this.events.set(await firstValueFrom(this.api.listEvents(this.eventSearch || undefined)));
-    });
-  }
-
-  async selectEvent(e: EventRow) {
-    this.selectedEventId.set(e.event_id);
-    await this.refreshEventData();
-  }
-
-  async refreshEventData() {
-    const eventId = this.selectedEventId();
-    if (!eventId) return;
-    await this.run(async () => {
-      const [b, i, w] = await Promise.all([
-        firstValueFrom(this.api.listBidders(eventId)),
-        firstValueFrom(this.api.listItems(eventId)),
-        firstValueFrom(this.api.listWinningBids(eventId)),
-      ]);
-      this.bidders.set(b);
-      this.items.set(i);
-      this.winningBids.set(w);
-    });
-  }
-
-  async createEvent() {
-    await this.run(async () => {
-      const created = await firstValueFrom(
-        this.api.createEvent({
-          event_desc: this.newEventDesc.trim(),
-          event_date: this.newEventDate.trim(),
-          event_tax_id: this.newEventTaxId.trim() ? this.newEventTaxId.trim() : null,
-        }),
-      );
-      this.ok.set(`Created event ${created.event_id}`);
-      this.newEventDesc = "";
-      this.newEventDate = "";
-      this.newEventTaxId = "";
-      await this.refreshEvents();
-    });
-  }
-
-  async createBidder() {
-    const eventId = this.selectedEventId();
-    if (!eventId) return;
-    await this.run(async () => {
-      await firstValueFrom(
-        this.api.createBidder({
-          event_id: eventId,
-          bidder_num: this.newBidderNum.trim() ? Number(this.newBidderNum) : null,
-          bidder_first_name: this.newBidderFirst.trim(),
-          bidder_last_name: this.newBidderLast.trim(),
-          bidder_email: this.newBidderEmail.trim() ? this.newBidderEmail.trim() : null,
-        }),
-      );
-      this.ok.set("Added bidder");
-      this.newBidderNum = "";
-      this.newBidderFirst = "";
-      this.newBidderLast = "";
-      this.newBidderEmail = "";
-      await this.refreshEventData();
-    });
-  }
-
-  async createItem() {
-    const eventId = this.selectedEventId();
-    if (!eventId) return;
-    await this.run(async () => {
-      await firstValueFrom(
-        this.api.createItem({
-          event_id: eventId,
-          item_type: this.newItemType,
-          item_desc: this.newItemDesc.trim(),
-          item_notes: this.newItemNotes.trim() ? this.newItemNotes.trim() : null,
-        }),
-      );
-      this.ok.set("Added item");
-      this.newItemDesc = "";
-      this.newItemNotes = "";
-      await this.refreshEventData();
-    });
-  }
-
-  async createWinningBid() {
-    const eventId = this.selectedEventId();
-    if (!eventId) return;
-    if (!this.newWinningBidderId || !this.newWinningItemId) return;
-    await this.run(async () => {
-      await firstValueFrom(
-        this.api.createWinningBid({
-          event_id: eventId,
-          bidder_id: this.newWinningBidderId!,
-          item_id: this.newWinningItemId!,
-          winning_bid: Number(this.newWinningAmount),
-        }),
-      );
-      this.ok.set("Recorded winning bid");
-      this.newWinningAmount = "";
-      await this.refreshEventData();
-    });
-  }
-
-  private async run(fn: () => Promise<void>) {
-    this.error.set(null);
-    this.ok.set(null);
-    this.busy.set(true);
-    try {
-      await fn();
-    } catch (e: any) {
-      const msg = e?.error?.message || e?.message || String(e);
-      const details = e?.error?.details ? JSON.stringify(e.error.details, null, 2) : "";
-      this.error.set(details ? `${msg}\n${details}` : msg);
-    } finally {
-      this.busy.set(false);
+    constructor(private api: ApiService) {
+        void this.refreshEvents();
     }
-  }
-}
 
+    async refreshEvents() {
+        await this.run(async () => {
+            this.events.set(await firstValueFrom(this.api.listEvents(this.eventSearch || undefined)));
+        });
+    }
+
+    async selectEvent(e: EventRow) {
+        this.selectedEventId.set(e.event_id);
+        await this.refreshEventData();
+    }
+
+    async refreshEventData() {
+        const eventId = this.selectedEventId();
+        if (!eventId) return;
+        await this.run(async () => {
+            const [b, i, w] = await Promise.all([
+                firstValueFrom(this.api.listBidders(eventId)),
+                firstValueFrom(this.api.listItems(eventId)),
+                firstValueFrom(this.api.listWinningBids(eventId)),
+            ]);
+            this.bidders.set(b);
+            this.items.set(i);
+            this.winningBids.set(w);
+        });
+    }
+
+    async createEvent() {
+        await this.run(async () => {
+            const created = await firstValueFrom(
+                this.api.createEvent({
+                    event_desc: this.newEventDesc.trim(),
+                    event_date: this.newEventDate.trim(),
+                    event_tax_id: this.newEventTaxId.trim() ? this.newEventTaxId.trim() : null,
+                }),
+            );
+            this.ok.set(`Created event ${created.event_id}`);
+            this.newEventDesc = "";
+            this.newEventDate = "";
+            this.newEventTaxId = "";
+            await this.refreshEvents();
+        });
+    }
+
+    async createBidder() {
+        const eventId = this.selectedEventId();
+        if (!eventId) return;
+        await this.run(async () => {
+            await firstValueFrom(
+                this.api.createBidder({
+                    event_id: eventId,
+                    bidder_num: this.newBidderNum.trim() ? Number(this.newBidderNum) : null,
+                    bidder_first_name: this.newBidderFirst.trim(),
+                    bidder_last_name: this.newBidderLast.trim(),
+                    bidder_email: this.newBidderEmail.trim() ? this.newBidderEmail.trim() : null,
+                }),
+            );
+            this.ok.set("Added bidder");
+            this.newBidderNum = "";
+            this.newBidderFirst = "";
+            this.newBidderLast = "";
+            this.newBidderEmail = "";
+            await this.refreshEventData();
+        });
+    }
+
+    async createItem() {
+        const eventId = this.selectedEventId();
+        if (!eventId) return;
+        await this.run(async () => {
+            await firstValueFrom(
+                this.api.createItem({
+                    event_id: eventId,
+                    item_type: this.newItemType,
+                    item_desc: this.newItemDesc.trim(),
+                    item_notes: this.newItemNotes.trim() ? this.newItemNotes.trim() : null,
+                }),
+            );
+            this.ok.set("Added item");
+            this.newItemDesc = "";
+            this.newItemNotes = "";
+            await this.refreshEventData();
+        });
+    }
+
+    async createWinningBid() {
+        const eventId = this.selectedEventId();
+        if (!eventId) return;
+        if (!this.newWinningBidderId || !this.newWinningItemId) return;
+        await this.run(async () => {
+            await firstValueFrom(
+                this.api.createWinningBid({
+                    event_id: eventId,
+                    bidder_id: this.newWinningBidderId!,
+                    item_id: this.newWinningItemId!,
+                    winning_bid: Number(this.newWinningAmount),
+                }),
+            );
+            this.ok.set("Recorded winning bid");
+            this.newWinningAmount = "";
+            await this.refreshEventData();
+        });
+    }
+
+    private async run(fn: () => Promise<void>) {
+        this.error.set(null);
+        this.ok.set(null);
+        this.busy.set(true);
+        try {
+            await fn();
+        } catch (e: any) {
+            const msg = e?.error?.message || e?.message || String(e);
+            const details = e?.error?.details ? JSON.stringify(e.error.details, null, 2) : "";
+            this.error.set(details ? `${msg}\n${details}` : msg);
+        } finally {
+            this.busy.set(false);
+        }
+    }
+}

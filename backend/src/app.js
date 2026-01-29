@@ -36,13 +36,30 @@ export function createApp() {
   }
 
   app.get("/events", async (req, res) => {
-    const q = z.object({ q: z.string().optional() }).safeParse(req.query);
-    const search = q.success ? q.data.q : undefined;
+    const q = z
+      .object({
+        q: z.string().optional(),
+        lookup: z.string().optional(),
+      })
+      .safeParse(req.query);
 
-    const sql = search
-      ? "select * from events where event_desc ilike $1 order by event_date desc, event_id desc"
-      : "select * from events order by event_date desc, event_id desc";
-    const params = search ? [`%${search}%`] : [];
+    if (!q.success) return res.status(400).json({ error: "Invalid query params" });
+    const { q: search, lookup } = q.data;
+
+    let sql = "select * from events";
+    const params = [];
+
+    if (lookup) {
+      // Strict match: upper case, strip space
+      sql += " where upper(replace(event_desc, ' ', '')) = upper(replace($1, ' ', ''))";
+      params.push(lookup);
+    } else if (search) {
+      sql += " where event_desc ilike $1";
+      params.push(`%${search}%`);
+    }
+
+    sql += " order by event_date desc, event_id desc";
+
     const r = await query(sql, params);
     res.json(r.rows);
   });
@@ -63,15 +80,50 @@ export function createApp() {
   });
 
   app.get("/bidders", async (req, res) => {
-    const parsed = z.object({ event_id: z.coerce.number().int().positive().optional() }).safeParse(req.query);
-    const eventId = parsed.success ? parsed.data.event_id : undefined;
+    const parser = z.object({
+      event_id: z.coerce.number().int().positive().optional(),
+      q: z.string().optional(),
+      // lookup fields
+      first_name: z.string().optional(),
+      last_name: z.string().optional(),
+      email: z.string().optional(),
+    });
 
-    const r = await query(
-      eventId
-        ? "select * from bidders where event_id=$1 order by bidder_num nulls last, bidder_id desc"
-        : "select * from bidders order by bidder_id desc",
-      eventId ? [eventId] : [],
-    );
+    const parsed = parser.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid query" });
+
+    const { event_id, q, first_name, last_name, email } = parsed.data;
+
+    let sql = "select * from bidders where 1=1";
+    const params = [];
+
+    if (event_id) {
+      params.push(event_id);
+      sql += ` and event_id = $${params.length}`;
+    }
+
+    if (first_name && last_name && email) {
+      // Strict match for record existence
+      params.push(first_name, last_name, email);
+      const p1 = params.length - 2;
+      const p2 = params.length - 1;
+      const p3 = params.length;
+      sql += ` and upper(replace(bidder_first_name, ' ', '')) = upper(replace($${p1}, ' ', ''))
+               and upper(replace(bidder_last_name, ' ', '')) = upper(replace($${p2}, ' ', ''))
+               and upper(replace(bidder_email, ' ', '')) = upper(replace($${p3}, ' ', ''))`;
+    } else if (q) {
+      // Fuzzy search across name/email
+      params.push(`%${q}%`);
+      sql += ` and (
+        bidder_first_name ilike $${params.length} or
+        bidder_last_name ilike $${params.length} or
+        bidder_email ilike $${params.length}
+      )`;
+    }
+
+    sql += " order by bidder_num nulls last, bidder_id desc";
+
+    const r = await query(sql, params);
     res.json(r.rows);
   });
 
@@ -99,13 +151,34 @@ export function createApp() {
   });
 
   app.get("/items", async (req, res) => {
-    const parsed = z.object({ event_id: z.coerce.number().int().positive().optional() }).safeParse(req.query);
-    const eventId = parsed.success ? parsed.data.event_id : undefined;
+    const parser = z.object({
+      event_id: z.coerce.number().int().positive().optional(),
+      q: z.string().optional(),
+      lookup: z.string().optional(), // item_desc strict match
+    });
+    const parsed = parser.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid query" });
+    const { event_id, q, lookup } = parsed.data;
 
-    const r = await query(
-      eventId ? "select * from items where event_id=$1 order by item_id desc" : "select * from items order by item_id desc",
-      eventId ? [eventId] : [],
-    );
+    let sql = "select * from items where 1=1";
+    const params = [];
+
+    if (event_id) {
+      params.push(event_id);
+      sql += ` and event_id = $${params.length}`;
+    }
+
+    if (lookup) {
+      params.push(lookup);
+      sql += ` and upper(replace(item_desc, ' ', '')) = upper(replace($${params.length}, ' ', ''))`;
+    } else if (q) {
+      params.push(`%${q}%`);
+      sql += ` and (item_desc ilike $${params.length} or item_notes ilike $${params.length})`;
+    }
+
+    sql += " order by item_id desc";
+
+    const r = await query(sql, params);
     res.json(r.rows);
   });
 
