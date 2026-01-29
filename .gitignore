@@ -1,0 +1,24 @@
+# Dependencies
+**/node_modules/
+*/dist/
+*/tmp/
+*/out-tsc/
+*/bazel-out/
+
+# Environment secrets (Critical for security)
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS & IDEs
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.log

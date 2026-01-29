@@ -1,0 +1,17 @@
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+# Chrome for Karma ChromeHeadless
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends chromium \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV CHROME_BIN=/usr/bin/chromium
+
+COPY package.json ./
+RUN npm install
+COPY . .
+
+CMD ["npm","test"]
+
