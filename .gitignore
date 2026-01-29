@@ -4,6 +4,7 @@
 */tmp/
 */out-tsc/
 */bazel-out/
+frontend/.angular/cache/
 
 # Environment secrets (Critical for security)
 .env

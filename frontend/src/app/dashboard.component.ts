@@ -6,9 +6,8 @@ import { ApiService } from "./api.service";
 import { BidderRow, EventRow, ItemRow, WinningBidRow } from "./api.types";
 
 @Component({
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
+    imports: [CommonModule, FormsModule],
+    template: `
     <div class="grid">
       <div class="card">
         <h2>Events</h2>
@@ -164,7 +163,7 @@ import { BidderRow, EventRow, ItemRow, WinningBidRow } from "./api.types";
         </div>
       </div>
     </div>
-  `,
+  `
 })
 export class DashboardComponent {
   busy = signal(false);

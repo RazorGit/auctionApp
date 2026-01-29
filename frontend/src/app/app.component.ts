@@ -2,10 +2,9 @@ import { Component } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 
 @Component({
-  selector: "app-root",
-  standalone: true,
-  imports: [RouterOutlet],
-  template: `
+    selector: "app-root",
+    imports: [RouterOutlet],
+    template: `
     <div class="container">
       <div class="nav">
         <div>
@@ -19,7 +18,7 @@ import { RouterOutlet } from "@angular/router";
       </div>
       <router-outlet></router-outlet>
     </div>
-  `,
+  `
 })
 export class AppComponent {}
 
