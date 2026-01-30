@@ -133,8 +133,21 @@ export class ItemFormComponent implements OnInit {
   ) { }
 
   async ngOnInit() {
+    const locator = this.route.snapshot.queryParamMap.get("event_locator");
     const id = this.route.snapshot.queryParamMap.get("event_id");
-    if (id) {
+
+    if (locator) {
+      try {
+        const events = await firstValueFrom(this.api.listEvents(undefined, locator));
+        if (events.length > 0) {
+          const ev = events[0];
+          this.fixedEventId.set(ev.event_id);
+          this.selectedEventId.set(ev.event_id);
+          this.eventName.set(ev.event_desc);
+          await this.refresh();
+        }
+      } catch (e) { }
+    } else if (id) {
       const eventId = Number(id);
       this.fixedEventId.set(eventId);
       this.selectedEventId.set(eventId);

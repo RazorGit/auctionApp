@@ -22,15 +22,15 @@ import { EventRow } from "./api.types";
         </p>
         
         <div class="grid">
-          <div class="card clickable" [routerLink]="['/bidders']" [queryParams]="{ event_id: event()?.event_id }">
+          <div class="card clickable" [routerLink]="['/bidders']" [queryParams]="{ event_locator: event()?.event_locator }">
             <h2>Bidders</h2>
             <p>Register and manage bidders for this event.</p>
           </div>
-          <div class="card clickable" [routerLink]="['/items']" [queryParams]="{ event_id: event()?.event_id }">
+          <div class="card clickable" [routerLink]="['/items']" [queryParams]="{ event_locator: event()?.event_locator }">
             <h2>Items</h2>
             <p>Manage items for this event.</p>
           </div>
-          <div class="card clickable" [routerLink]="['/winning-bids']" [queryParams]="{ event_id: event()?.event_id }">
+          <div class="card clickable" [routerLink]="['/winning-bids']" [queryParams]="{ event_locator: event()?.event_locator }">
             <h2>Winning Bids</h2>
             <p>Record winning bids for this event.</p>
           </div>
