@@ -121,7 +121,8 @@ export class EventFormComponent implements OnInit {
 
   select(e: EventRow) {
     this.desc = e.event_desc;
-    this.date = e.event_date;
+    // Sanitize ISO date to YYYY-MM-DD for backend validation
+    this.date = e.event_date ? e.event_date.split("T")[0] : "";
     this.taxId = e.event_tax_id || "";
     this.existingId.set(e.event_id);
   }
