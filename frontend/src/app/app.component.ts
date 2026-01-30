@@ -22,6 +22,6 @@ import { RouterOutlet, RouterLink } from "@angular/router";
       </div>
       <router-outlet></router-outlet>
     </div>
-  `,
+  `
 })
 export class AppComponent { }
