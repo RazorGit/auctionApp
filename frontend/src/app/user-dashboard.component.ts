@@ -53,8 +53,8 @@ import { EventRow } from "./api.types";
       text-transform: uppercase; 
       letter-spacing: 1px;
     }
-    h1 { color: #333; margin-bottom: 10px; }
-    .subtitle { color: #666; margin-bottom: 40px; }
+    h1 { color: #000; margin-bottom: 10px; }
+    .subtitle { color: #000; margin-bottom: 40px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px; }
     .card { 
       padding: 30px; 
@@ -62,6 +62,7 @@ import { EventRow } from "./api.types";
       border-radius: 15px; 
       box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
       transition: all 0.3s ease;
+      color: #000;
     }
     .card:hover { 
       transform: translateY(-8px); 
@@ -69,9 +70,9 @@ import { EventRow } from "./api.types";
     }
     .clickable { cursor: pointer; }
     h2 { color: #28a745; margin-bottom: 15px; }
-    p { color: #555; line-height: 1.5; }
-    .loading { font-size: 1.2rem; color: #666; margin-top: 50px; }
-    .error-card { padding: 40px; background: #fff5f5; border-radius: 12px; border: 1px solid #feb2b2; }
+    p { color: #000; line-height: 1.5; }
+    .loading { font-size: 1.2rem; color: #000; margin-top: 50px; }
+    .error-card { padding: 40px; background: #fff5f5; border-radius: 12px; border: 1px solid #feb2b2; color: #000; }
     button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 20px; }
   `]
 })

@@ -42,7 +42,7 @@ import { RouterModule } from "@angular/router";
       text-transform: uppercase; 
       letter-spacing: 1px;
     }
-    h1 { color: #333; margin-bottom: 30px; text-align: center; }
+    h1 { color: #000; margin-bottom: 30px; text-align: center; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
     .card { 
       padding: 24px; 
@@ -51,6 +51,7 @@ import { RouterModule } from "@angular/router";
       box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
       transition: transform 0.2s, box-shadow 0.2s;
       text-align: center;
+      color: #000;
     }
     .card:hover { 
       transform: translateY(-5px); 
@@ -58,7 +59,7 @@ import { RouterModule } from "@angular/router";
     }
     .clickable { cursor: pointer; }
     h2 { color: #007bff; margin-bottom: 10px; }
-    p { color: #666; font-size: 14px; }
+    p { color: #000; font-size: 14px; }
   `]
 })
 export class AdminDashboardComponent { }

@@ -30,7 +30,7 @@ import { Observable, Subject, debounceTime, switchMap, of, catchError } from "rx
   `,
   styles: [`
     .typeahead-container { position: relative; width: 100%; }
-    .typeahead-input { width: 100%; padding: 8px; box-sizing: border-box; }
+    .typeahead-input { width: 100%; padding: 8px; box-sizing: border-box; color: #000; background: white; }
     .typeahead-results {
       position: absolute;
       top: 100%;
