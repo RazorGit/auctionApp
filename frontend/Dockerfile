@@ -1,14 +1,14 @@
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
 RUN npm install
 COPY . .
-RUN npm run build
+RUN npx ng build
 
 FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Angular "application" builder outputs to dist/<app>/browser
+# Angular 19 application builder outputs to dist/webapp/browser
 COPY --from=build /app/dist/webapp/browser /usr/share/nginx/html
-COPY --from=build /app/dist/webapp/3rdpartylicenses.txt /usr/share/nginx/html/3rdpartylicenses.txt
-
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

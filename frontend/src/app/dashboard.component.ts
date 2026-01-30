@@ -1,13 +1,14 @@
 import { CommonModule } from "@angular/common";
-import { Component, computed, signal } from "@angular/core";
+import { Component, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { firstValueFrom } from "rxjs";
 import { ApiService } from "./api.service";
 import { BidderRow, EventRow, ItemRow, WinningBidRow } from "./api.types";
 
 @Component({
-    imports: [CommonModule, FormsModule],
-    template: `
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
     <div class="grid">
       <div class="card">
         <h2>Events</h2>
@@ -317,4 +318,3 @@ export class DashboardComponent {
     }
   }
 }
-
