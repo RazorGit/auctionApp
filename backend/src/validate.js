@@ -29,3 +29,8 @@ export const WinningBidCreate = z.object({
   winning_bid: z.number().nonnegative(),
 });
 
+export const EventUpdate = EventCreate;
+export const BidderUpdate = BidderCreate;
+export const ItemUpdate = ItemCreate;
+export const WinningBidUpdate = WinningBidCreate;
+

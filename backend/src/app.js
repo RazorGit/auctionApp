@@ -2,7 +2,12 @@ import express from "express";
 import cors from "cors";
 import { z } from "zod";
 import { query } from "./db.js";
-import { BidderCreate, EventCreate, ItemCreate, WinningBidCreate } from "./validate.js";
+import {
+  BidderCreate, BidderUpdate,
+  EventCreate, EventUpdate,
+  ItemCreate, ItemUpdate,
+  WinningBidCreate, WinningBidUpdate
+} from "./validate.js";
 
 export function createApp() {
   const app = express();
@@ -50,9 +55,16 @@ export function createApp() {
     const params = [];
 
     if (lookup) {
-      // Strict match: upper case, strip space
-      sql += " where upper(replace(event_desc, ' ', '')) = upper(replace($1, ' ', ''))";
-      params.push(lookup);
+      const cleanLookup = lookup.trim().toUpperCase();
+      if (cleanLookup.length === 8 && /^[0-9A-F]+$/.test(cleanLookup)) {
+        // MD5 hash-based locator match
+        sql += " where event_locator = $1";
+        params.push(cleanLookup);
+      } else {
+        // Fallback or legacy: sanitized description match
+        sql += " where upper(replace(event_desc, ' ', '')) = upper(replace($1, ' ', ''))";
+        params.push(lookup);
+      }
     } else if (search) {
       sql += " where event_desc ilike $1";
       params.push(`%${search}%`);
@@ -74,6 +86,31 @@ export function createApp() {
         [body.event_desc, body.event_date, body.event_tax_id ?? null],
       );
       res.status(201).json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.put("/events/:id", async (req, res, next) => {
+    try {
+      const body = parseBody(EventUpdate, req.body);
+      const r = await query(
+        `update events set event_desc = $1, event_date = $2, event_tax_id = $3
+         where event_id = $4
+         returning *`,
+        [body.event_desc, body.event_date, body.event_tax_id ?? null, req.params.id],
+      );
+      if (r.rows.length === 0) return res.status(404).json({ error: "NotFound" });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/events/:id", async (req, res, next) => {
+    try {
+      await query("delete from events where event_id = $1", [req.params.id]);
+      res.status(204).end();
     } catch (e) {
       next(e);
     }
@@ -150,6 +187,41 @@ export function createApp() {
     }
   });
 
+  app.put("/bidders/:id", async (req, res, next) => {
+    try {
+      const body = parseBody(BidderUpdate, req.body);
+      const r = await query(
+        `update bidders set
+          event_id = $1, bidder_num = $2, bidder_first_name = $3,
+          bidder_last_name = $4, bidder_email = $5, bidder_credit_card_token = $6
+         where bidder_id = $7
+         returning *`,
+        [
+          body.event_id,
+          body.bidder_num ?? null,
+          body.bidder_first_name,
+          body.bidder_last_name,
+          body.bidder_email ?? null,
+          body.bidder_credit_card_token ?? null,
+          req.params.id
+        ],
+      );
+      if (r.rows.length === 0) return res.status(404).json({ error: "NotFound" });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/bidders/:id", async (req, res, next) => {
+    try {
+      await query("delete from bidders where bidder_id = $1", [req.params.id]);
+      res.status(204).end();
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.get("/items", async (req, res) => {
     const parser = z.object({
       event_id: z.coerce.number().int().positive().optional(),
@@ -197,6 +269,31 @@ export function createApp() {
     }
   });
 
+  app.put("/items/:id", async (req, res, next) => {
+    try {
+      const body = parseBody(ItemUpdate, req.body);
+      const r = await query(
+        `update items set event_id = $1, item_type = $2, item_desc = $3, item_notes = $4
+         where item_id = $5
+         returning *`,
+        [body.event_id, body.item_type, body.item_desc, body.item_notes ?? null, req.params.id],
+      );
+      if (r.rows.length === 0) return res.status(404).json({ error: "NotFound" });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/items/:id", async (req, res, next) => {
+    try {
+      await query("delete from items where item_id = $1", [req.params.id]);
+      res.status(204).end();
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.get("/winning-bids", async (req, res) => {
     const parsed = z.object({ event_id: z.coerce.number().int().positive().optional() }).safeParse(req.query);
     const eventId = parsed.success ? parsed.data.event_id : undefined;
@@ -234,6 +331,31 @@ export function createApp() {
     }
   });
 
+  app.put("/winning-bids/:id", async (req, res, next) => {
+    try {
+      const body = parseBody(WinningBidUpdate, req.body);
+      const r = await query(
+        `update winning_bids set event_id = $1, bidder_id = $2, item_id = $3, winning_bid = $4
+         where winning_bid_id = $5
+         returning *`,
+        [body.event_id, body.bidder_id, body.item_id, body.winning_bid, req.params.id],
+      );
+      if (r.rows.length === 0) return res.status(404).json({ error: "NotFound" });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.delete("/winning-bids/:id", async (req, res, next) => {
+    try {
+      await query("delete from winning_bids where winning_bid_id = $1", [req.params.id]);
+      res.status(204).end();
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.use((err, _req, res, _next) => {
     const status = err?.status || 500;
     res.status(status).json({
@@ -245,4 +367,3 @@ export function createApp() {
 
   return app;
 }
-

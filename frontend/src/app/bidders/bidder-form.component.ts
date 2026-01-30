@@ -1,101 +1,258 @@
-import { Component, signal } from "@angular/core";
+import { Component, signal, OnInit } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
+import { ActivatedRoute, Router } from "@angular/router";
 import { ApiService } from "../api.service";
 import { firstValueFrom } from "rxjs";
 import { TypeaheadComponent } from "../typeahead/typeahead.component";
 import { EventRow, BidderRow } from "../api.types";
 
 @Component({
-    standalone: true,
-    imports: [CommonModule, FormsModule, TypeaheadComponent],
-    template: `
-    <div class="card">
-      <h2>Bidder Entry</h2>
-      <div class="row">
-        <label>Event</label>
-        <app-typeahead
-          [searchFn]="searchEvents"
-          [formatter]="eventFormatter"
-          placeholder="Select Event..."
-          (selected)="onEventSelected($event)"
-        ></app-typeahead>
+  standalone: true,
+  imports: [CommonModule, FormsModule, TypeaheadComponent],
+  template: `
+    <div class="container">
+      <div class="header">
+        <button class="btn-secondary" (click)="back()">← Back</button>
+        <h1>{{ eventName() ? eventName() + ': ' : '' }}Bidder Management</h1>
       </div>
 
-      <div *ngIf="selectedEventId()">
-        <div class="row">
-          <label>First Name</label>
-          <input [(ngModel)]="firstName" />
+      <div class="grid">
+        <div class="card form-card">
+          <div class="row" *ngIf="!fixedEventId()">
+            <label>Event</label>
+            <app-typeahead
+              [searchFn]="searchEvents"
+              [formatter]="eventFormatter"
+              placeholder="Select Event..."
+              (selected)="onEventSelected($event)"
+            ></app-typeahead>
+          </div>
+
+          <div *ngIf="selectedEventId()">
+            <h2>{{ existingId() ? 'Update' : 'New' }} Bidder</h2>
+            <div class="row">
+              <label>First Name</label>
+              <input [(ngModel)]="firstName" />
+            </div>
+            <div class="row">
+              <label>Last Name</label>
+              <input [(ngModel)]="lastName" />
+            </div>
+            <div class="row">
+              <label>Email</label>
+              <input [(ngModel)]="email" />
+            </div>
+            <div class="row">
+              <label>Bidder #</label>
+              <input [(ngModel)]="bidderNum" placeholder="Optional" />
+            </div>
+            <div class="actions">
+              <button class="btn-primary" (click)="save()" [disabled]="busy() || !firstName || !lastName">Save</button>
+              <button class="btn-secondary" (click)="cancel()">Cancel</button>
+            </div>
+            <div class="ok" *ngIf="success()">{{ success() }}</div>
+            <div class="error" *ngIf="error()">{{ error() }}</div>
+          </div>
+          <div *ngIf="!selectedEventId()" class="info-card">
+            Please select an event to manage bidders.
+          </div>
         </div>
-        <div class="row">
-          <label>Last Name</label>
-          <input [(ngModel)]="lastName" />
+
+        <div class="card list-card" *ngIf="selectedEventId()">
+          <h2>Bidders ({{ bidders().length }})</h2>
+          <div class="scroll-area">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let b of bidders()" (click)="select(b)" [class.selected]="existingId() === b.bidder_id">
+                  <td>{{ b.bidder_num ?? '—' }}</td>
+                  <td>{{ b.bidder_first_name }} {{ b.bidder_last_name }}</td>
+                  <td>{{ b.bidder_email ?? '—' }}</td>
+                  <td>
+                    <button class="btn-danger btn-sm" (click)="delete($event, b.bidder_id)">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="row">
-          <label>Email</label>
-          <input [(ngModel)]="email" />
-        </div>
-        <div class="row">
-          <label>Bidder #</label>
-          <input [(ngModel)]="bidderNum" placeholder="Optional" />
-        </div>
-        <button (click)="save()" [disabled]="busy() || !firstName || !lastName">Add Bidder</button>
-        <div class="ok" *ngIf="success()">{{ success() }}</div>
-        <div class="error" *ngIf="error()">{{ error() }}</div>
       </div>
     </div>
   `,
-    styles: [`
-    .card { padding: 20px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 600px; margin: 20px auto; }
+  styles: [`
+    .container { padding: 20px; max-width: 1200px; margin: 0 auto; }
+    .header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { padding: 20px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .row { margin-bottom: 15px; }
     label { display: block; margin-bottom: 5px; font-weight: bold; }
-    input { width: 100%; padding: 8px; box-sizing: border-box; }
-    button { padding: 10px 20px; cursor: pointer; }
-    .ok { color: green; margin-top: 10px; }
-    .error { color: red; margin-top: 10px; }
+    input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+    .actions { display: flex; gap: 10px; margin-top: 20px; }
+    button { padding: 10px 20px; cursor: pointer; border-radius: 4px; border: none; font-weight: 500; }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-secondary { background: #6c757d; color: white; }
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .scroll-area { max-height: 500px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; }
+    td { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+    tr:hover td { background: #f8f9fa; }
+    tr.selected td { background: #e7f1ff; }
+    .ok { color: #28a745; margin-top: 10px; font-weight: bold; }
+    .error { color: #dc3545; margin-top: 10px; font-weight: bold; }
+    .info-card { padding: 40px; text-align: center; color: #666; font-style: italic; }
   `]
 })
-export class BidderFormComponent {
-    selectedEventId = signal<number | null>(null);
-    firstName = "";
-    lastName = "";
-    email = "";
-    bidderNum = "";
-    busy = signal(false);
-    success = signal<string | null>(null);
-    error = signal<string | null>(null);
+export class BidderFormComponent implements OnInit {
+  fixedEventId = signal<number | null>(null);
+  selectedEventId = signal<number | null>(null);
+  eventName = signal<string | null>(null);
 
-    constructor(private api: ApiService) { }
+  firstName = "";
+  lastName = "";
+  email = "";
+  bidderNum = "";
+  existingId = signal<number | null>(null);
+  bidders = signal<BidderRow[]>([]);
 
-    searchEvents = (q: string) => this.api.listEvents(q);
-    eventFormatter = (e: EventRow) => e.event_desc;
+  busy = signal(false);
+  success = signal<string | null>(null);
+  error = signal<string | null>(null);
 
-    onEventSelected(e: EventRow) {
-        this.selectedEventId.set(e.event_id);
+  constructor(
+    private api: ApiService,
+    private route: ActivatedRoute,
+    private router: Router
+  ) { }
+
+  async ngOnInit() {
+    const id = this.route.snapshot.queryParamMap.get("event_id");
+    if (id) {
+      const eventId = Number(id);
+      this.fixedEventId.set(eventId);
+      this.selectedEventId.set(eventId);
+      await this.loadEventInfo(eventId);
+      await this.refresh();
     }
+  }
 
-    async save() {
-        if (!this.selectedEventId()) return;
-        this.busy.set(true);
-        this.success.set(null);
-        this.error.set(null);
-        try {
-            const res = await firstValueFrom(this.api.createBidder({
-                event_id: this.selectedEventId()!,
-                bidder_first_name: this.firstName,
-                bidder_last_name: this.lastName,
-                bidder_email: this.email || null,
-                bidder_num: this.bidderNum ? Number(this.bidderNum) : null
-            }));
-            this.success.set(`Created bidder ${res.bidder_id}`);
-            this.firstName = "";
-            this.lastName = "";
-            this.email = "";
-            this.bidderNum = "";
-        } catch (e: any) {
-            this.error.set(e?.message || "Error creating bidder");
-        } finally {
-            this.busy.set(false);
-        }
+  async loadEventInfo(id: number) {
+    try {
+      // listEvents doesn't have getById, so we list and filter locally or use lookup
+      // For now just list all and find (small number of events)
+      const events = await firstValueFrom(this.api.listEvents());
+      const ev = events.find(e => e.event_id === id);
+      if (ev) this.eventName.set(ev.event_desc);
+    } catch (e) { }
+  }
+
+  searchEvents = (q: string) => this.api.listEvents(q);
+  eventFormatter = (e: EventRow) => e.event_desc;
+
+  async onEventSelected(e: EventRow) {
+    this.selectedEventId.set(e.event_id);
+    this.eventName.set(e.event_desc);
+    await this.refresh();
+  }
+
+  async refresh() {
+    const id = this.selectedEventId();
+    if (!id) return;
+    try {
+      const list = await firstValueFrom(this.api.listBidders(id));
+      this.bidders.set(list);
+    } catch (e) {
+      console.error(e);
     }
+  }
+
+  select(b: BidderRow) {
+    this.firstName = b.bidder_first_name;
+    this.lastName = b.bidder_last_name;
+    this.email = b.bidder_email || "";
+    this.bidderNum = b.bidder_num?.toString() || "";
+    this.existingId.set(b.bidder_id);
+  }
+
+  cancel() {
+    this.firstName = "";
+    this.lastName = "";
+    this.email = "";
+    this.bidderNum = "";
+    this.existingId.set(null);
+    this.success.set(null);
+    this.error.set(null);
+  }
+
+  back() {
+    if (this.fixedEventId()) {
+      // Probably came from User Dashboard? Need to know locator.
+      // Simplified: just go back in history.
+      window.history.back();
+    } else {
+      this.router.navigate(["/admin"]);
+    }
+  }
+
+  async save() {
+    if (!this.selectedEventId()) return;
+    this.busy.set(true);
+    this.success.set(null);
+    this.error.set(null);
+    try {
+      if (this.existingId()) {
+        const res = await firstValueFrom(this.api.updateBidder(this.existingId()!, {
+          event_id: this.selectedEventId()!,
+          bidder_first_name: this.firstName,
+          bidder_last_name: this.lastName,
+          bidder_email: this.email || null,
+          bidder_num: this.bidderNum ? Number(this.bidderNum) : null
+        }));
+        this.success.set(`Updated bidder ${res.bidder_id}`);
+        this.cancel();
+        await this.refresh();
+      } else {
+        const res = await firstValueFrom(this.api.createBidder({
+          event_id: this.selectedEventId()!,
+          bidder_first_name: this.firstName,
+          bidder_last_name: this.lastName,
+          bidder_email: this.email || null,
+          bidder_num: this.bidderNum ? Number(this.bidderNum) : null
+        }));
+        this.success.set(`Created bidder ${res.bidder_id}`);
+        this.cancel();
+        await this.refresh();
+      }
+    } catch (e: any) {
+      this.error.set(e?.message || "Error saving bidder");
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async delete(ev: MouseEvent, id: number) {
+    ev.stopPropagation();
+    if (!confirm("Are you sure you want to delete this bidder?")) return;
+    this.busy.set(true);
+    try {
+      await firstValueFrom(this.api.deleteBidder(id));
+      if (this.existingId() === id) this.cancel();
+      await this.refresh();
+      this.success.set("Deleted bidder.");
+    } catch (e: any) {
+      this.error.set(e?.message || "Error deleting bidder");
+    } finally {
+      this.busy.set(false);
+    }
+  }
 }

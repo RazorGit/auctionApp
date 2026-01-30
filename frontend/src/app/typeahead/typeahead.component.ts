@@ -4,10 +4,10 @@ import { FormsModule } from "@angular/forms";
 import { Observable, Subject, debounceTime, switchMap, of, catchError } from "rxjs";
 
 @Component({
-    selector: "app-typeahead",
-    standalone: true,
-    imports: [CommonModule, FormsModule],
-    template: `
+  selector: "app-typeahead",
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
     <div class="typeahead-container">
       <input
         [ngModel]="inputValue"
@@ -28,7 +28,7 @@ import { Observable, Subject, debounceTime, switchMap, of, catchError } from "rx
       </div>
     </div>
   `,
-    styles: [`
+  styles: [`
     .typeahead-container { position: relative; width: 100%; }
     .typeahead-input { width: 100%; padding: 8px; box-sizing: border-box; }
     .typeahead-results {
@@ -53,51 +53,56 @@ import { Observable, Subject, debounceTime, switchMap, of, catchError } from "rx
   `]
 })
 export class TypeaheadComponent<T> {
-    @Input() searchFn!: (query: string) => Observable<T[]>;
-    @Input() formatter: (item: T) => string = (item: any) => String(item);
-    @Input() placeholder = "";
-    @Output() selected = new EventEmitter<T>();
-    @Output() queryChange = new EventEmitter<string>();
-
-    inputValue = "";
-    results = signal<T[]>([]);
-    isOpen = signal(false);
-
-    private searchSubject = new Subject<string>();
-
-    constructor() {
-        this.searchSubject.pipe(
-            debounceTime(300),
-            switchMap(q => {
-                if (!q) return of([]);
-                return this.searchFn(q).pipe(catchError(() => of([])));
-            })
-        ).subscribe(results => {
-            this.results.set(results);
-            this.isOpen.set(results.length > 0);
-        });
+  @Input() searchFn!: (query: string) => Observable<T[]>;
+  @Input() formatter: (item: T) => string = (item: any) => String(item);
+  @Input() placeholder = "";
+  @Input() set initialValue(val: string | null) {
+    if (val !== undefined) {
+      this.inputValue = val || "";
     }
+  }
+  @Output() selected = new EventEmitter<T>();
+  @Output() queryChange = new EventEmitter<string>();
 
-    onInput(value: string) {
-        this.inputValue = value;
-        this.queryChange.emit(value);
-        this.searchSubject.next(value);
-    }
+  inputValue = "";
+  results = signal<T[]>([]);
+  isOpen = signal(false);
 
-    onFocus() {
-        if (this.inputValue) {
-            this.searchSubject.next(this.inputValue);
-        }
-    }
+  private searchSubject = new Subject<string>();
 
-    onBlur() {
-        // Delay hiding to allow click event to register
-        setTimeout(() => this.isOpen.set(false), 200);
-    }
+  constructor() {
+    this.searchSubject.pipe(
+      debounceTime(300),
+      switchMap(q => {
+        if (!q) return of([]);
+        return this.searchFn(q).pipe(catchError(() => of([])));
+      })
+    ).subscribe(results => {
+      this.results.set(results);
+      this.isOpen.set(results.length > 0);
+    });
+  }
 
-    select(item: T) {
-        this.inputValue = this.formatter(item);
-        this.selected.emit(item);
-        this.isOpen.set(false);
+  onInput(value: string) {
+    this.inputValue = value;
+    this.queryChange.emit(value);
+    this.searchSubject.next(value);
+  }
+
+  onFocus() {
+    if (this.inputValue) {
+      this.searchSubject.next(this.inputValue);
     }
+  }
+
+  onBlur() {
+    // Delay hiding to allow click event to register
+    setTimeout(() => this.isOpen.set(false), 200);
+  }
+
+  select(item: T) {
+    this.inputValue = this.formatter(item);
+    this.selected.emit(item);
+    this.isOpen.set(false);
+  }
 }

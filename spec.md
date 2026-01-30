@@ -1,6 +1,18 @@
 # Summary
 Web application for managing auction items, bidders and winning bids.
 
+Separate data entry / update pages for each entity (event, bidder, item, winning_bid)
+
++ One page (of buttons or links) for admin with access to all screens 
++ One page (of buttons or links) for user access to all screens except event - event locator will be known and provided in url 
+
+Each screen;
++ Will have a "Save" button and a "Cancel" button. 
++ Will have a "Delete" button. 
++ Will have a "Back" button. 
+
+Fields should support type-ahead for auto-completion.
+
 # Technology Stack
 + Postgresql in Docker Container
 + Node.js, Angular in Docker container
