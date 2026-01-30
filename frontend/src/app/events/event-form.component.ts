@@ -45,6 +45,8 @@ import { EventRow } from "../api.types";
             <table>
               <thead>
                 <tr>
+                  <th>ID</th>
+                  <th>Locator</th>
                   <th>Desc</th>
                   <th>Date</th>
                   <th>Action</th>
@@ -52,6 +54,8 @@ import { EventRow } from "../api.types";
               </thead>
               <tbody>
                 <tr *ngFor="let e of events()" (click)="select(e)" [class.selected]="existingId() === e.event_id">
+                  <td style="font-weight: bold;">{{ e.event_id }}</td>
+                  <td><code>{{ e.event_locator }}</code></td>
                   <td>{{ e.event_desc }}</td>
                   <td>{{ e.event_date }}</td>
                   <td>

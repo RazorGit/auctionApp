@@ -15,7 +15,11 @@ import { EventRow } from "./api.types";
       <div *ngIf="!loading() && event()">
         <div class="role-badge">Event Dashboard</div>
         <h1>{{ event()?.event_desc }}</h1>
-        <p class="subtitle">Event Date: {{ event()?.event_date }}</p>
+        <p class="subtitle">
+          ID: {{ event()?.event_id }} | 
+          Locator: <code>{{ event()?.event_locator }}</code> |
+          Date: {{ event()?.event_date }}
+        </p>
         
         <div class="grid">
           <div class="card clickable" [routerLink]="['/bidders']" [queryParams]="{ event_id: event()?.event_id }">
