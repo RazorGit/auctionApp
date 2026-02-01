@@ -15,6 +15,7 @@ import { Observable, Subject, debounceTime, switchMap, of, catchError } from "rx
         (focus)="onFocus()"
         (blur)="onBlur()"
         [placeholder]="placeholder"
+        [required]="required"
         class="typeahead-input"
       />
       <div *ngIf="isOpen() && results().length" class="typeahead-results">
@@ -30,25 +31,45 @@ import { Observable, Subject, debounceTime, switchMap, of, catchError } from "rx
   `,
   styles: [`
     .typeahead-container { position: relative; width: 100%; }
-    .typeahead-input { width: 100%; padding: 8px; box-sizing: border-box; color: #000; background: white; }
+    .typeahead-input { 
+      width: 100%; 
+      padding: 10px 12px; 
+      box-sizing: border-box; 
+      color: var(--text); 
+      background: rgba(0,0,0,0.2); 
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .typeahead-input:required:invalid {
+      border-color: rgba(220, 53, 69, 0.5);
+    }
+    .typeahead-input:required:valid {
+      border-color: rgba(40, 167, 69, 0.3);
+    }
     .typeahead-results {
       position: absolute;
       top: 100%;
       left: 0;
       right: 0;
-      background: white;
-      border: 1px solid #ccc;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
       max-height: 200px;
       overflow-y: auto;
       z-index: 1000;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     .typeahead-item {
-      padding: 8px;
+      padding: 10px 12px;
       cursor: pointer;
+      color: var(--text);
+      font-size: 14px;
     }
     .typeahead-item:hover {
-      background: #f0f0f0;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--accent);
     }
   `]
 })
@@ -56,6 +77,7 @@ export class TypeaheadComponent<T> {
   @Input() searchFn!: (query: string) => Observable<T[]>;
   @Input() formatter: (item: T) => string = (item: any) => String(item);
   @Input() placeholder = "";
+  @Input() required = false;
   @Input() set initialValue(val: string | null) {
     if (val !== undefined) {
       this.inputValue = val || "";

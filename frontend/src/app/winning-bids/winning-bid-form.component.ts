@@ -20,40 +20,43 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
       <div class="grid">
         <div class="card form-card">
           <div class="row" *ngIf="!fixedEventId()">
-            <label>Event</label>
+            <label class="required-label">Event <span class="asterisk">*</span></label>
             <app-typeahead
               [searchFn]="searchEvents"
               [formatter]="eventFormatter"
               placeholder="Select Event..."
               (selected)="onEventSelected($event)"
+              [required]="true"
             ></app-typeahead>
           </div>
 
           <div *ngIf="selectedEventId()">
             <h2>{{ existingId() ? 'Update' : 'New' }} Winning Bid</h2>
             <div class="row">
-              <label>Bidder</label>
+              <label class="required-label">Bidder <span class="asterisk">*</span></label>
               <app-typeahead
                 [searchFn]="searchBidders"
                 [formatter]="bidderFormatter"
                 [initialValue]="initialBidder"
                 placeholder="Search Bidder..."
                 (selected)="onBidderSelected($event)"
+                [required]="true"
               ></app-typeahead>
             </div>
             <div class="row">
-              <label>Item</label>
+              <label class="required-label">Item <span class="asterisk">*</span></label>
               <app-typeahead
                 [searchFn]="searchItems"
                 [formatter]="itemFormatter"
                 [initialValue]="initialItem"
                 placeholder="Search Item..."
                 (selected)="onItemSelected($event)"
+                [required]="true"
               ></app-typeahead>
             </div>
             <div class="row">
-              <label>Amount</label>
-              <input [(ngModel)]="amount" type="number" />
+              <label class="required-label">Amount <span class="asterisk">*</span></label>
+              <input [(ngModel)]="amount" type="number" required />
             </div>
             <div class="actions">
               <button class="btn-primary" (click)="save()" [disabled]="busy() || !selectedBidderId() || !selectedItemId() || !amount">Save</button>
@@ -119,6 +122,9 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
     .ok { color: #28a745; margin-top: 10px; font-weight: bold; }
     .error { color: #dc3545; margin-top: 10px; font-weight: bold; }
     .info-card { padding: 40px; text-align: center; color: #000; font-style: italic; }
+    .asterisk { color: #dc3545; }
+    input:required:invalid { border-color: rgba(220, 53, 69, 0.5); }
+    input:required:valid { border-color: rgba(40, 167, 69, 0.3); }
   `]
 })
 export class WinningBidFormComponent implements OnInit {

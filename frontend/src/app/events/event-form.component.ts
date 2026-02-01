@@ -20,12 +20,12 @@ import { EventRow } from "../api.types";
         <div class="card form-card">
           <h2>{{ existingId() ? 'Update' : 'New' }} Event</h2>
           <div class="row">
-            <label>Description</label>
-            <input [(ngModel)]="desc" placeholder="e.g. Annual Gala" />
+            <label class="required-label">Description <span class="asterisk">*</span></label>
+            <input [(ngModel)]="desc" placeholder="e.g. Annual Gala" required />
           </div>
           <div class="row">
-            <label>Date</label>
-            <input [(ngModel)]="date" placeholder="YYYY-MM-DD" />
+            <label class="required-label">Date <span class="asterisk">*</span></label>
+            <input [(ngModel)]="date" placeholder="YYYY-MM-DD" required />
           </div>
           <div class="row">
             <label>Tax ID</label>
@@ -92,6 +92,9 @@ import { EventRow } from "../api.types";
     tr.selected td { background: #e7f1ff; }
     .ok { color: #28a745; margin-top: 10px; font-weight: bold; }
     .error { color: #dc3545; margin-top: 10px; font-weight: bold; }
+    .asterisk { color: #dc3545; }
+    input:required:invalid { border-color: rgba(220, 53, 69, 0.5); }
+    input:required:valid { border-color: rgba(40, 167, 69, 0.3); }
   `]
 })
 export class EventFormComponent implements OnInit {

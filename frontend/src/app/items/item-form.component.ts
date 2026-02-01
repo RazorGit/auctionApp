@@ -20,20 +20,21 @@ import { EventRow, ItemRow } from "../api.types";
       <div class="grid">
         <div class="card form-card">
           <div class="row" *ngIf="!fixedEventId()">
-            <label>Event</label>
+            <label class="required-label">Event <span class="asterisk">*</span></label>
             <app-typeahead
               [searchFn]="searchEvents"
               [formatter]="eventFormatter"
               placeholder="Select Event..."
               (selected)="onEventSelected($event)"
+              [required]="true"
             ></app-typeahead>
           </div>
 
           <div *ngIf="selectedEventId()">
             <h2>{{ existingId() ? 'Update' : 'New' }} Item</h2>
             <div class="row">
-              <label>Description</label>
-              <input [(ngModel)]="itemDesc" placeholder="e.g. Wine Basket" />
+              <label class="required-label">Description <span class="asterisk">*</span></label>
+              <input [(ngModel)]="itemDesc" placeholder="e.g. Wine Basket" required />
             </div>
             <div class="row">
               <label>Type</label>
@@ -108,6 +109,9 @@ import { EventRow, ItemRow } from "../api.types";
     .ok { color: #28a745; margin-top: 10px; font-weight: bold; }
     .error { color: #dc3545; margin-top: 10px; font-weight: bold; }
     .info-card { padding: 40px; text-align: center; color: #000; font-style: italic; }
+    .asterisk { color: #dc3545; }
+    input:required:invalid { border-color: rgba(220, 53, 69, 0.5); }
+    input:required:valid { border-color: rgba(40, 167, 69, 0.3); }
   `]
 })
 export class ItemFormComponent implements OnInit {
