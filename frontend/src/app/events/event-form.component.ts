@@ -168,7 +168,8 @@ export class EventFormComponent implements OnInit {
         await this.refresh();
       }
     } catch (e: any) {
-      this.error.set(e?.message || "Error saving event");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error saving event";
+      this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
     }
@@ -184,7 +185,8 @@ export class EventFormComponent implements OnInit {
       await this.refresh();
       this.success.set("Deleted event.");
     } catch (e: any) {
-      this.error.set(e?.message || "Error deleting event");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error deleting event";
+      this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
     }

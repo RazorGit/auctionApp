@@ -251,7 +251,8 @@ export class BidderFormComponent implements OnInit {
         await this.refresh();
       }
     } catch (e: any) {
-      this.error.set(e?.message || "Error saving bidder");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error saving bidder";
+      this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
     }
@@ -267,7 +268,8 @@ export class BidderFormComponent implements OnInit {
       await this.refresh();
       this.success.set("Deleted bidder.");
     } catch (e: any) {
-      this.error.set(e?.message || "Error deleting bidder");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error deleting bidder";
+      this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
     }

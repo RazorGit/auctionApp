@@ -11,7 +11,7 @@ export const BidderCreate = z.object({
   bidder_num: z.number().int().positive().nullable().optional(),
   bidder_first_name: z.string().min(1).max(100),
   bidder_last_name: z.string().min(1).max(100),
-  bidder_email: z.string().email().nullable().optional(),
+  bidder_email: z.string().email("Invalid email address - please use a proper email format (e.g., user@example.com or x@x.com)").nullable().optional(),
   bidder_credit_card_token: z.string().max(100).nullable().optional(),
 });
 

@@ -273,7 +273,8 @@ export class WinningBidFormComponent implements OnInit {
         await this.refresh();
       }
     } catch (e: any) {
-      this.error.set(e?.message || "Error saving winning bid");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error saving winning bid";
+      this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
     }
@@ -289,7 +290,8 @@ export class WinningBidFormComponent implements OnInit {
       await this.refresh();
       this.success.set("Deleted winning bid.");
     } catch (e: any) {
-      this.error.set(e?.message || "Error deleting winning bid");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error deleting winning bid";
+      this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
     }

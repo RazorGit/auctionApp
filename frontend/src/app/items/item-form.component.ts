@@ -240,7 +240,8 @@ export class ItemFormComponent implements OnInit {
         await this.refresh();
       }
     } catch (e: any) {
-      this.errorMessage.set(e?.message || "Error saving item");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error saving item";
+      this.errorMessage.set(errorMsg);
     } finally {
       this.busy.set(false);
     }
@@ -256,7 +257,8 @@ export class ItemFormComponent implements OnInit {
       await this.refresh();
       this.successMessage.set("Deleted item.");
     } catch (e: any) {
-      this.errorMessage.set(e?.message || "Error deleting item");
+      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error deleting item";
+      this.errorMessage.set(errorMsg);
     } finally {
       this.busy.set(false);
     }
