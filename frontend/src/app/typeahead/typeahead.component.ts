@@ -79,9 +79,8 @@ export class TypeaheadComponent<T> {
   @Input() placeholder = "";
   @Input() required = false;
   @Input() set initialValue(val: string | null) {
-    if (val !== undefined) {
-      this.inputValue = val || "";
-    }
+    // Always update inputValue, including when null (to clear the field)
+    this.inputValue = val || "";
   }
   @Output() selected = new EventEmitter<T>();
   @Output() queryChange = new EventEmitter<string>();

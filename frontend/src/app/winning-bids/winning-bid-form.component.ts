@@ -30,29 +30,33 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
             ></app-typeahead>
           </div>
 
-          <div *ngIf="selectedEventId()">
+          <div *ngIf="selectedEventId()" [attr.data-key]="formKey()">
             <h2>{{ existingId() ? 'Update' : 'New' }} Winning Bid</h2>
             <div class="row">
-              <label class="required-label">Bidder <span class="asterisk">*</span></label>
-              <app-typeahead
-                [searchFn]="searchBidders"
-                [formatter]="bidderFormatter"
-                [initialValue]="initialBidder"
-                placeholder="Search Bidder..."
-                (selected)="onBidderSelected($event)"
-                [required]="true"
-              ></app-typeahead>
+              <label class="required-label">Item <span class="asterisk">*</span></label>
+              <ng-container *ngIf="formKey() >= 0">
+                <app-typeahead
+                  [searchFn]="searchItems"
+                  [formatter]="itemFormatter"
+                  [initialValue]="initialItem"
+                  placeholder="Search Item..."
+                  (selected)="onItemSelected($event)"
+                  [required]="true"
+                ></app-typeahead>
+              </ng-container>
             </div>
             <div class="row">
-              <label class="required-label">Item <span class="asterisk">*</span></label>
-              <app-typeahead
-                [searchFn]="searchItems"
-                [formatter]="itemFormatter"
-                [initialValue]="initialItem"
-                placeholder="Search Item..."
-                (selected)="onItemSelected($event)"
-                [required]="true"
-              ></app-typeahead>
+              <label class="required-label">Bidder <span class="asterisk">*</span></label>
+              <ng-container *ngIf="formKey() >= 0">
+                <app-typeahead
+                  [searchFn]="searchBidders"
+                  [formatter]="bidderFormatter"
+                  [initialValue]="initialBidder"
+                  placeholder="Search Bidder..."
+                  (selected)="onBidderSelected($event)"
+                  [required]="true"
+                ></app-typeahead>
+              </ng-container>
             </div>
             <div class="row">
               <label class="required-label">Amount <span class="asterisk">*</span></label>
@@ -140,6 +144,7 @@ export class WinningBidFormComponent implements OnInit {
   amount = "";
   existingId = signal<number | null>(null);
   winningBids = signal<WinningBidRow[]>([]);
+  formKey = signal(0); // Used to force re-render of typeaheads
 
   busy = signal(false);
   success = signal<string | null>(null);
@@ -235,6 +240,10 @@ export class WinningBidFormComponent implements OnInit {
     this.initialItem = null;
     this.success.set(null);
     this.error.set(null);
+    // Temporarily hide form to force typeahead recreation
+    const currentKey = this.formKey();
+    this.formKey.set(-1);
+    setTimeout(() => this.formKey.set(currentKey + 1), 0);
   }
 
   back() {
