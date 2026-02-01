@@ -49,5 +49,62 @@ describe("API", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("POST /events rejects asterisk in event_desc", async () => {
+    const app = createApp();
+    const res = await request(app).post("/events").send({
+      event_desc: "Annual*Gala",
+      event_date: "2026-12-31"
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].message).toBe("Asterisk cannot be used");
+  });
+
+  it("POST /bidders rejects asterisk in first_name", async () => {
+    const app = createApp();
+    const res = await request(app).post("/bidders").send({
+      event_id: 1,
+      bidder_first_name: "sam*spade",
+      bidder_last_name: "Smith",
+      bidder_email: "sam@example.com"
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].message).toBe("Asterisk cannot be used");
+  });
+
+  it("POST /bidders rejects asterisk in last_name", async () => {
+    const app = createApp();
+    const res = await request(app).post("/bidders").send({
+      event_id: 1,
+      bidder_first_name: "Sam",
+      bidder_last_name: "Smith*Jones",
+      bidder_email: "sam@example.com"
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].message).toBe("Asterisk cannot be used");
+  });
+
+  it("POST /items rejects asterisk in item_desc", async () => {
+    const app = createApp();
+    const res = await request(app).post("/items").send({
+      event_id: 1,
+      item_type: "Live",
+      item_desc: "Wine*Basket"
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].message).toBe("Asterisk cannot be used");
+  });
+
+  it("POST /bidders rejects invalid email with custom message", async () => {
+    const app = createApp();
+    const res = await request(app).post("/bidders").send({
+      event_id: 1,
+      bidder_first_name: "John",
+      bidder_last_name: "Doe",
+      bidder_email: "x"
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].message).toBe("Invalid email address - please use a proper email format (e.g., user@example.com or x@x.com)");
+  });
 });
 

@@ -1,25 +1,25 @@
 import { z } from "zod";
 
 export const EventCreate = z.object({
-  event_desc: z.string().min(1).max(100),
+  event_desc: z.string().min(1).max(100).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }),
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
-  event_tax_id: z.string().max(16).nullable().optional(),
+  event_tax_id: z.string().max(16).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }).nullable().optional(),
 });
 
 export const BidderCreate = z.object({
   event_id: z.number().int().positive(),
   bidder_num: z.number().int().positive().nullable().optional(),
-  bidder_first_name: z.string().min(1).max(100),
-  bidder_last_name: z.string().min(1).max(100),
-  bidder_email: z.string().email("Invalid email address - please use a proper email format (e.g., user@example.com or x@x.com)").nullable().optional(),
-  bidder_credit_card_token: z.string().max(100).nullable().optional(),
+  bidder_first_name: z.string().min(1).max(100).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }),
+  bidder_last_name: z.string().min(1).max(100).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }),
+  bidder_email: z.string().email("Invalid email address - please use a proper email format (e.g., user@example.com or x@x.com)").refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }).nullable().optional(),
+  bidder_credit_card_token: z.string().max(100).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }).nullable().optional(),
 });
 
 export const ItemCreate = z.object({
   event_id: z.number().int().positive(),
   item_type: z.enum(["Live", "Not Live"]),
-  item_desc: z.string().min(1).max(100),
-  item_notes: z.string().max(100).nullable().optional(),
+  item_desc: z.string().min(1).max(100).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }),
+  item_notes: z.string().max(100).refine(val => !val.includes('*'), { message: "Asterisk cannot be used" }).nullable().optional(),
 });
 
 export const WinningBidCreate = z.object({

@@ -96,8 +96,10 @@ export class TypeaheadComponent<T> {
     this.searchSubject.pipe(
       debounceTime(300),
       switchMap(q => {
+        // Treat "*" as wildcard to show all results
+        const searchQuery = q === "*" ? "" : q;
         if (!q) return of([]);
-        return this.searchFn(q).pipe(catchError(() => of([])));
+        return this.searchFn(searchQuery).pipe(catchError(() => of([])));
       })
     ).subscribe(results => {
       this.results.set(results);
