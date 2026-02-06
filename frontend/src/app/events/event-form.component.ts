@@ -1,4 +1,4 @@
-import { Component, signal, OnInit } from "@angular/core";
+import { Component, signal, computed, OnInit } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
@@ -45,15 +45,15 @@ import { EventRow } from "../api.types";
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Locator</th>
-                  <th>Desc</th>
-                  <th>Date</th>
+                  <th (click)="toggleSort('event_id')">ID {{ sortColumn() === 'event_id' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
+                  <th (click)="toggleSort('event_locator')">Locator {{ sortColumn() === 'event_locator' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
+                  <th (click)="toggleSort('event_desc')">Desc {{ sortColumn() === 'event_desc' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
+                  <th (click)="toggleSort('event_date')">Date {{ sortColumn() === 'event_date' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let e of events()" (click)="select(e)" [class.selected]="existingId() === e.event_id">
+                <tr *ngFor="let e of sortedEvents()" (click)="select(e)" [class.selected]="existingId() === e.event_id">
                   <td style="font-weight: bold;">{{ e.event_id }}</td>
                   <td><code>{{ e.event_locator }}</code></td>
                   <td>{{ e.event_desc }}</td>
@@ -86,7 +86,7 @@ import { EventRow } from "../api.types";
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .scroll-area { max-height: 400px; overflow-y: auto; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; cursor: pointer; user-select: none; }
     td { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
     tr:hover td { background: #f8f9fa; }
     tr.selected td { background: #e7f1ff; }
@@ -103,6 +103,30 @@ export class EventFormComponent implements OnInit {
   taxId = "";
   existingId = signal<number | null>(null);
   events = signal<EventRow[]>([]);
+  sortColumn = signal<keyof EventRow | null>(null);
+  sortDirection = signal<'asc' | 'desc'>('asc');
+
+  sortedEvents = computed(() => {
+    const data = [...this.events()];
+    const col = this.sortColumn();
+    const dir = this.sortDirection();
+    if (!col) return data;
+
+    return data.sort((a, b) => {
+      const aVal = a[col];
+      const bVal = b[col];
+      if (aVal === bVal) return 0;
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      return dir === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal < bVal ? 1 : -1);
+    });
+  });
+
   busy = signal(false);
   success = signal<string | null>(null);
   error = signal<string | null>(null);
@@ -189,6 +213,15 @@ export class EventFormComponent implements OnInit {
       this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  toggleSort(col: keyof EventRow) {
+    if (this.sortColumn() === col) {
+      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sortColumn.set(col);
+      this.sortDirection.set('asc');
     }
   }
 }

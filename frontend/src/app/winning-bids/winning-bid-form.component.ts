@@ -1,4 +1,4 @@
-import { Component, signal, OnInit } from "@angular/core";
+import { Component, signal, computed, OnInit } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router } from "@angular/router";
@@ -80,14 +80,14 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
             <table>
               <thead>
                 <tr>
-                  <th>Bidder</th>
-                  <th>Item</th>
-                  <th>Amt</th>
+                  <th (click)="toggleSort('bidder_last_name')">Bidder {{ sortColumn() === 'bidder_last_name' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
+                  <th (click)="toggleSort('item_desc')">Item {{ sortColumn() === 'item_desc' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
+                  <th (click)="toggleSort('winning_bid')">Amt {{ sortColumn() === 'winning_bid' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let wb of winningBids()" (click)="select(wb)" [class.selected]="existingId() === wb.winning_bid_id">
+                <tr *ngFor="let wb of sortedWinningBids()" (click)="select(wb)" [class.selected]="existingId() === wb.winning_bid_id">
                   <td>{{ wb.bidder_first_name }} {{ wb.bidder_last_name }}</td>
                   <td>{{ wb.item_desc }}</td>
                   <td>{{ wb.winning_bid }}</td>
@@ -119,7 +119,7 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .scroll-area { max-height: 500px; overflow-y: auto; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; cursor: pointer; user-select: none; }
     td { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
     tr:hover td { background: #f8f9fa; }
     tr.selected td { background: #e7f1ff; }
@@ -145,6 +145,37 @@ export class WinningBidFormComponent implements OnInit {
   existingId = signal<number | null>(null);
   winningBids = signal<WinningBidRow[]>([]);
   formKey = signal(0); // Used to force re-render of typeaheads
+
+  sortColumn = signal<keyof WinningBidRow | null>(null);
+  sortDirection = signal<'asc' | 'desc'>('asc');
+
+  sortedWinningBids = computed(() => {
+    const data = [...this.winningBids()];
+    const col = this.sortColumn();
+    const dir = this.sortDirection();
+    if (!col) return data;
+
+    return data.sort((a, b) => {
+      // Special case for amount (which is stored as string but should sort numerically)
+      if (col === 'winning_bid') {
+        const aNum = parseFloat(a.winning_bid || '0');
+        const bNum = parseFloat(b.winning_bid || '0');
+        return dir === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+
+      const aVal = a[col];
+      const bVal = b[col];
+      if (aVal === bVal) return 0;
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      return dir === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal < bVal ? 1 : -1);
+    });
+  });
 
   busy = signal(false);
   success = signal<string | null>(null);
@@ -303,6 +334,15 @@ export class WinningBidFormComponent implements OnInit {
       this.error.set(errorMsg);
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  toggleSort(col: keyof WinningBidRow) {
+    if (this.sortColumn() === col) {
+      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sortColumn.set(col);
+      this.sortDirection.set('asc');
     }
   }
 }

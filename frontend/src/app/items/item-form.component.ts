@@ -1,4 +1,4 @@
-import { Component, signal, OnInit } from "@angular/core";
+import { Component, signal, computed, OnInit } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router } from "@angular/router";
@@ -65,13 +65,13 @@ import { EventRow, ItemRow } from "../api.types";
             <table>
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Desc</th>
+                  <th (click)="toggleSort('item_type')">Type {{ sortColumn() === 'item_type' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
+                  <th (click)="toggleSort('item_desc')">Desc {{ sortColumn() === 'item_desc' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let i of items()" (click)="select(i)" [class.selected]="existingId() === i.item_id">
+                <tr *ngFor="let i of sortedItems()" (click)="select(i)" [class.selected]="existingId() === i.item_id">
                   <td>{{ i.item_type }}</td>
                   <td>{{ i.item_desc }}</td>
                   <td>
@@ -102,7 +102,7 @@ import { EventRow, ItemRow } from "../api.types";
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .scroll-area { max-height: 500px; overflow-y: auto; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; cursor: pointer; user-select: none; }
     td { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
     tr:hover td { background: #f8f9fa; }
     tr.selected td { background: #e7f1ff; }
@@ -125,6 +125,29 @@ export class ItemFormComponent implements OnInit {
 
   existingId = signal<number | null>(null);
   items = signal<ItemRow[]>([]);
+  sortColumn = signal<keyof ItemRow | null>(null);
+  sortDirection = signal<'asc' | 'desc'>('asc');
+
+  sortedItems = computed(() => {
+    const data = [...this.items()];
+    const col = this.sortColumn();
+    const dir = this.sortDirection();
+    if (!col) return data;
+
+    return data.sort((a, b) => {
+      const aVal = a[col];
+      const bVal = b[col];
+      if (aVal === bVal) return 0;
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      return dir === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal < bVal ? 1 : -1);
+    });
+  });
 
   busy = signal(false);
   successMessage = signal<string | null>(null);
@@ -261,6 +284,15 @@ export class ItemFormComponent implements OnInit {
       this.errorMessage.set(errorMsg);
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  toggleSort(col: keyof ItemRow) {
+    if (this.sortColumn() === col) {
+      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sortColumn.set(col);
+      this.sortDirection.set('asc');
     }
   }
 }

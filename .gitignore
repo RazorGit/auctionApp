@@ -23,3 +23,4 @@ lerna-debug.log*
 .idea/
 *.swp
 *.log
+webapp.code-workspace
