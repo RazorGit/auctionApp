@@ -7,7 +7,11 @@ import {
   BidderCreate, BidderUpdate,
   EventCreate, EventUpdate,
   ItemCreate, ItemUpdate,
-  WinningBidCreate, WinningBidUpdate
+  WinningBidCreate, WinningBidUpdate,
+  MembershipRequestCreate,
+  MembershipDecision,
+  AuctionStart,
+  BidCreate
 } from "./validate.js";
 
 export function createApp() {
@@ -70,6 +74,30 @@ export function createApp() {
   async function getEventByLocator(locator) {
     const r = await query("select * from events where event_locator = $1", [locator]);
     return r.rows[0] ?? null;
+  }
+
+  function isAuctionOngoing(eventRow) {
+    if (!eventRow) return false;
+    if (eventRow.status !== 'ongoing') return false;
+    if (eventRow.ends_at) {
+      const ends = new Date(eventRow.ends_at);
+      if (Number.isFinite(ends.getTime()) && Date.now() > ends.getTime()) return false;
+    }
+    return true;
+  }
+
+  async function getEventById(eventId) {
+    const r = await query("select * from events where event_id = $1", [eventId]);
+    return r.rows[0] ?? null;
+  }
+
+  async function requireApprovedMembership(userId, eventId) {
+    const r = await query(
+      "select status from event_memberships where user_id = $1 and event_id = $2",
+      [userId, eventId],
+    );
+    const row = r.rows[0];
+    return row?.status === 'approved';
   }
 
   // -------------------------
@@ -521,6 +549,328 @@ export function createApp() {
       await query("delete from winning_bids where winning_bid_id = $1", [req.params.id]);
       res.status(204).end();
     } catch (e) {
+      next(e);
+    }
+  });
+
+  // -------------------------
+  // Auction discovery
+  // -------------------------
+  app.get("/auctions", requireAuth, async (req, res) => {
+    const s = req.session;
+
+    const filter = z.object({
+      status: z.enum(['scheduled', 'ongoing', 'ended']).optional(),
+    }).safeParse(req.query);
+
+    const status = filter.success ? filter.data.status : undefined;
+
+    if (s.role === 'admin') {
+      const r = await query(
+        status ? "select * from events where status = $1 order by event_date desc, event_id desc" : "select * from events order by event_date desc, event_id desc",
+        status ? [status] : [],
+      );
+      return res.json(r.rows);
+    }
+
+    // Users: show all auctions, but with membership status.
+    const r = await query(
+      `select e.*, m.status as membership_status
+       from events e
+       left join event_memberships m
+         on m.event_id = e.event_id and m.user_id = $1
+       ${status ? "where e.status = $2" : ""}
+       order by e.event_date desc, e.event_id desc`,
+      status ? [s.user_id, status] : [s.user_id],
+    );
+
+    res.json(r.rows);
+  });
+
+  // -------------------------
+  // Membership requests (user)
+  // -------------------------
+  app.get("/memberships/me", requireAuth, async (req, res) => {
+    const s = req.session;
+    const r = await query(
+      `select m.*, e.event_desc, e.event_date, e.event_locator, e.status as event_status
+       from event_memberships m
+       join events e on e.event_id = m.event_id
+       where m.user_id = $1
+       order by m.requested_at desc`,
+      [s.user_id],
+    );
+    res.json(r.rows);
+  });
+
+  app.post("/memberships", requireRole("user"), async (req, res, next) => {
+    try {
+      const s = req.session;
+      const body = parseBody(MembershipRequestCreate, req.body);
+
+      const existing = await query(
+        "select * from event_memberships where user_id = $1 and event_id = $2",
+        [s.user_id, body.event_id],
+      );
+      if (existing.rows.length) {
+        return res.status(200).json(existing.rows[0]);
+      }
+
+      const r = await query(
+        `insert into event_memberships (event_id, user_id, status)
+         values ($1,$2,'pending')
+         returning *`,
+        [body.event_id, s.user_id],
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // -------------------------
+  // Membership approvals (admin)
+  // -------------------------
+  app.get("/admin/memberships/pending", requireRole("admin"), async (_req, res) => {
+    const r = await query(
+      `select m.*, u.username, e.event_desc, e.event_date, e.event_locator
+       from event_memberships m
+       join users u on u.user_id = m.user_id
+       join events e on e.event_id = m.event_id
+       where m.status = 'pending'
+       order by m.requested_at asc`,
+      [],
+    );
+    res.json(r.rows);
+  });
+
+  app.post("/admin/memberships/:id/decide", requireRole("admin"), async (req, res, next) => {
+    try {
+      const s = req.session;
+      const body = parseBody(MembershipDecision, req.body);
+
+      const r = await query(
+        `update event_memberships
+         set status = $1, decided_at = now(), decided_by_user_id = $2
+         where membership_id = $3
+         returning *`,
+        [body.status, s.user_id, req.params.id],
+      );
+      if (!r.rows.length) return res.status(404).json({ error: 'NotFound' });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get("/admin/memberships/approved", requireRole("admin"), async (_req, res, next) => {
+    try {
+      const r = await query(
+        `select m.*, u.username, e.event_desc, e.event_date, e.event_locator
+         from event_memberships m
+         join users u on u.user_id = m.user_id
+         join events e on e.event_id = m.event_id
+         where m.status = 'approved'
+         order by m.decided_at desc nulls last, m.requested_at desc`,
+        [],
+      );
+      res.json(r.rows);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // Manually add user to auction (admin)
+  app.post("/admin/auctions/:eventId/members", requireRole("admin"), async (req, res, next) => {
+    try {
+      const s = req.session;
+      const parsed = z.object({ username: z.string().min(1) }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'BadRequest' });
+      const { username } = parsed.data;
+
+      const ur = await query("select user_id from users where username = $1", [username]);
+      const u = ur.rows[0];
+      if (!u) return res.status(404).json({ error: 'UserNotFound' });
+
+      const eventId = Number(req.params.eventId);
+
+      const existing = await query(
+        "select * from event_memberships where user_id = $1 and event_id = $2",
+        [u.user_id, eventId],
+      );
+
+      if (existing.rows.length) {
+        const updated = await query(
+          `update event_memberships set status = 'approved', decided_at = now(), decided_by_user_id = $1
+           where membership_id = $2 returning *`,
+          [s.user_id, existing.rows[0].membership_id],
+        );
+        return res.json(updated.rows[0]);
+      }
+
+      const r = await query(
+        `insert into event_memberships (event_id, user_id, status, decided_at, decided_by_user_id)
+         values ($1,$2,'approved', now(), $3)
+         returning *`,
+        [eventId, u.user_id, s.user_id],
+      );
+
+      res.status(201).json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // -------------------------
+  // Auction controls (admin)
+  // -------------------------
+  app.post("/admin/auctions/:id/start", requireRole("admin"), async (req, res, next) => {
+    try {
+      const body = parseBody(AuctionStart, req.body);
+      const eventId = Number(req.params.id);
+
+      const seconds = body.time_limit_seconds ?? null;
+      const r = await query(
+        `update events
+         set status = 'ongoing',
+             starts_at = now(),
+             time_limit_seconds = $1,
+             ends_at = case when $1::int is null then null else (now() + ($1::text || ' seconds')::interval) end
+         where event_id = $2
+         returning *`,
+        [seconds, eventId],
+      );
+      if (!r.rows.length) return res.status(404).json({ error: 'NotFound' });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/admin/auctions/:id/stop", requireRole("admin"), async (req, res, next) => {
+    try {
+      const eventId = Number(req.params.id);
+      const r = await query(
+        `update events
+         set status = 'ended', ends_at = now()
+         where event_id = $1
+         returning *`,
+        [eventId],
+      );
+      if (!r.rows.length) return res.status(404).json({ error: 'NotFound' });
+      res.json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // -------------------------
+  // Bids (users place bids; admin can browse)
+  // -------------------------
+  app.get("/bids", requireAuth, async (req, res) => {
+    const s = req.session;
+
+    const parsed = z.object({
+      event_id: z.coerce.number().int().positive(),
+      item_id: z.coerce.number().int().positive().optional(),
+      limit: z.coerce.number().int().positive().max(200).optional(),
+    }).safeParse(req.query);
+
+    if (!parsed.success) return res.status(400).json({ error: 'BadRequest' });
+
+    const { event_id, item_id } = parsed.data;
+    const limit = parsed.data.limit ?? 50;
+
+    if (s.role === 'user') {
+      const ok = await requireApprovedMembership(s.user_id, event_id);
+      if (!ok) return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const params = [event_id];
+    let sql = `select b.*, u.username, i.item_desc
+               from bids b
+               join users u on u.user_id = b.user_id
+               join items i on i.item_id = b.item_id
+               where b.event_id = $1`;
+    if (item_id) {
+      params.push(item_id);
+      sql += ` and b.item_id = $2`;
+    }
+    params.push(limit);
+    sql += ` order by b.placed_at desc limit $${params.length}`;
+
+    const r = await query(sql, params);
+    res.json(r.rows);
+  });
+
+  app.post("/bids", requireRole("user"), async (req, res, next) => {
+    try {
+      const s = req.session;
+      const body = parseBody(BidCreate, req.body);
+
+      const ok = await requireApprovedMembership(s.user_id, body.event_id);
+      if (!ok) return res.status(403).json({ error: 'MembershipNotApproved' });
+
+      const eventRow = await getEventById(body.event_id);
+      if (!isAuctionOngoing(eventRow)) {
+        return res.status(409).json({ error: 'AuctionNotOngoing' });
+      }
+
+      // Item must belong to event
+      const ir = await query("select item_id from items where item_id = $1 and event_id = $2", [body.item_id, body.event_id]);
+      if (!ir.rows.length) return res.status(400).json({ error: 'InvalidItem' });
+
+      const r = await query(
+        `insert into bids (event_id, item_id, user_id, amount)
+         values ($1,$2,$3,$4)
+         returning *`,
+        [body.event_id, body.item_id, s.user_id, body.amount],
+      );
+
+      res.status(201).json(r.rows[0]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // -------------------------
+  // Admin: Users ("bidders" as app logins)
+  // -------------------------
+  app.get("/admin/users", requireRole("admin"), async (_req, res, next) => {
+    try {
+      const r = await query(
+        "select user_id, username, role, event_id from users where role = 'user' order by user_id desc",
+        [],
+      );
+      res.json(r.rows);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/admin/users", requireRole("admin"), async (req, res, next) => {
+    try {
+      const parsed = z.object({
+        username: z.string().min(1).max(50),
+        password: z.string().min(1).optional(),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'BadRequest' });
+
+      const username = parsed.data.username.trim();
+      const password = parsed.data.password ?? 'pass';
+      const password_b64 = Buffer.from(password, 'utf8').toString('base64');
+
+      const r = await query(
+        `insert into users (username, password_b64, role, event_id)
+         values ($1, $2, 'user', null)
+         returning user_id, username, role, event_id`,
+        [username, password_b64],
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (e) {
+      if (String(e?.code) === '23505') {
+        return res.status(409).json({ error: 'UsernameAlreadyExists' });
+      }
       next(e);
     }
   });

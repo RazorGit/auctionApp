@@ -12,7 +12,13 @@ CREATE TABLE IF NOT EXISTS events (
   ) STORED,
   event_desc      VARCHAR(100) NOT NULL,
   event_date      DATE NOT NULL,
-  event_tax_id    VARCHAR(16)
+  event_tax_id    VARCHAR(16),
+  status          VARCHAR(12) NOT NULL DEFAULT 'scheduled',
+  starts_at       TIMESTAMPTZ,
+  ends_at         TIMESTAMPTZ,
+  time_limit_seconds INT,
+
+  CONSTRAINT chk_events_status CHECK (status IN ('scheduled','ongoing','ended'))
 );
 
 -- BIDDERS
@@ -89,6 +95,45 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT fk_users_event FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE SET NULL
 );
 
+-- Memberships: users request to join an auction; admin approves.
+CREATE TABLE IF NOT EXISTS event_memberships (
+  membership_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_id INT NOT NULL,
+  user_id INT NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'pending',
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ,
+  decided_by_user_id INT,
+
+  CONSTRAINT fk_membership_event FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+  CONSTRAINT fk_membership_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_membership_decider FOREIGN KEY (decided_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+  CONSTRAINT chk_membership_status CHECK (status IN ('pending','approved','denied')),
+  CONSTRAINT ux_membership_event_user UNIQUE (event_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_event_memberships_status ON event_memberships(status);
+CREATE INDEX IF NOT EXISTS ix_event_memberships_event ON event_memberships(event_id);
+CREATE INDEX IF NOT EXISTS ix_event_memberships_user ON event_memberships(user_id);
+
+-- Bids: users place bids on items. Admin sees all bids; user sees their own + latest.
+CREATE TABLE IF NOT EXISTS bids (
+  bid_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_id INT NOT NULL,
+  item_id INT NOT NULL,
+  user_id INT NOT NULL,
+  amount NUMERIC(10,2) NOT NULL,
+  placed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT fk_bids_event FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+  CONSTRAINT fk_bids_item FOREIGN KEY (item_id) REFERENCES items(item_id) ON DELETE CASCADE,
+  CONSTRAINT fk_bids_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CONSTRAINT chk_bids_amount CHECK (amount > 0)
+);
+
+CREATE INDEX IF NOT EXISTS ix_bids_event_item ON bids(event_id, item_id, placed_at DESC);
+CREATE INDEX IF NOT EXISTS ix_bids_user ON bids(user_id, placed_at DESC);
+
 -- Helpful indexes for FK lookups
 CREATE INDEX IF NOT EXISTS ix_bidders_event_id ON bidders(event_id);
 CREATE INDEX IF NOT EXISTS ix_items_event_id ON items(event_id);
@@ -145,5 +190,14 @@ VALUES
   ('user1', 'cGFzcw==', 'user', 1),
   ('user2', 'cGFzcw==', 'user', 2),
   ('user3', 'cGFzcw==', 'user', 3);
+
+-- Seed memberships: attach user1/user2/user3 to their default event as approved (demo)
+INSERT INTO event_memberships (event_id, user_id, status, requested_at, decided_at, decided_by_user_id)
+SELECT u.event_id, u.user_id, 'approved', now(), now(), (SELECT user_id FROM users WHERE username = 'admin')
+FROM users u
+WHERE u.role = 'user' AND u.event_id IS NOT NULL;
+
+-- Optionally mark seeded events as scheduled in the future by default
+UPDATE events SET status = 'scheduled', starts_at = NULL, ends_at = NULL, time_limit_seconds = NULL;
 
 COMMIT;

@@ -1,85 +1,99 @@
-import { Component, signal, computed, OnInit } from "@angular/core";
+import { Component, signal, OnInit } from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
-import { ActivatedRoute, Router } from "@angular/router";
+import { Router } from "@angular/router";
 import { ApiService } from "../api.service";
 import { firstValueFrom } from "rxjs";
-import { TypeaheadComponent } from "../typeahead/typeahead.component";
-import { EventRow, BidderRow } from "../api.types";
 
 @Component({
   standalone: true,
-  imports: [CommonModule, FormsModule, TypeaheadComponent],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="container">
       <div class="header">
         <button class="btn-secondary" (click)="back()">← Back</button>
-        <h1>{{ eventName() ? eventName() + ': ' : '' }}Bidder Management</h1>
+        <h1>Bidder Management</h1>
       </div>
 
       <div class="grid">
         <div class="card form-card">
-          <div class="row" *ngIf="!fixedEventId()">
-            <label class="required-label">Event <span class="asterisk">*</span></label>
-            <app-typeahead
-              [searchFn]="searchEvents"
-              [formatter]="eventFormatter"
-              placeholder="Select Event..."
-              (selected)="onEventSelected($event)"
-              [required]="true"
-            ></app-typeahead>
+          <h2>New Bidder (App User)</h2>
+          <p class="muted">Creates a new login with default password <code>pass</code>.</p>
+
+          <div class="row">
+            <label class="required-label">Username <span class="asterisk">*</span></label>
+            <input [(ngModel)]="newUsername" placeholder="e.g. bidder_jane" required />
           </div>
 
-          <div *ngIf="selectedEventId()">
-            <h2>{{ existingId() ? 'Update' : 'New' }} Bidder</h2>
-            <div class="row">
-              <label class="required-label">First Name <span class="asterisk">*</span></label>
-              <input [(ngModel)]="firstName" required />
-            </div>
-            <div class="row">
-              <label class="required-label">Last Name <span class="asterisk">*</span></label>
-              <input [(ngModel)]="lastName" required />
-            </div>
-            <div class="row">
-              <label>Email</label>
-              <input [(ngModel)]="email" />
-            </div>
-            <div class="row">
-              <label>Bidder #</label>
-              <input [(ngModel)]="bidderNum" placeholder="Optional" />
-            </div>
-            <div class="actions">
-              <button class="btn-primary" (click)="save()" [disabled]="busy() || !firstName || !lastName">Save</button>
-              <button class="btn-secondary" (click)="cancel()">Cancel</button>
-            </div>
-            <div class="ok" *ngIf="success()">{{ success() }}</div>
-            <div class="error" *ngIf="error()">{{ error() }}</div>
+          <div class="actions">
+            <button class="btn-primary" (click)="createUser()" [disabled]="busy() || !newUsername">Create</button>
+            <button class="btn-secondary" (click)="resetNewUser()">Reset</button>
           </div>
-          <div *ngIf="!selectedEventId()" class="info-card">
-            Please select an event to manage bidders.
+
+          <div class="ok" *ngIf="success()">{{ success() }}</div>
+          <div class="error" *ngIf="error()">{{ error() }}</div>
+
+          <div class="divider"></div>
+
+          <h2>Manually add bidder to an auction</h2>
+          <div class="row">
+            <label>User</label>
+            <select [(ngModel)]="manualUserId">
+              <option [ngValue]="null">Select user…</option>
+              <option *ngFor="let u of users()" [ngValue]="u.user_id">{{ u.username }}</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Event</label>
+            <select [(ngModel)]="manualEventId">
+              <option [ngValue]="null">Select event…</option>
+              <option *ngFor="let e of events()" [ngValue]="e.event_id">{{ e.event_desc }} ({{ e.event_id }})</option>
+            </select>
+          </div>
+          <button class="btn-primary" (click)="manualAdd()" [disabled]="busy() || !manualUserId || !manualEventId">Add / Approve</button>
+
+          <div class="divider"></div>
+
+          <h2>Join Requests</h2>
+          <p class="muted">Approve or deny user requests to join auctions.</p>
+
+          <div *ngIf="loadingPending()" class="muted">Loading…</div>
+          <div *ngIf="!loadingPending() && !pending().length" class="muted">No pending requests.</div>
+
+          <div class="list" *ngIf="!loadingPending() && pending().length">
+            <div class="row-line" *ngFor="let r of pending()">
+              <div>
+                <div class="title2">{{ r.username }} → {{ r.event_desc }}</div>
+                <div class="meta">Requested: {{ r.requested_at }}</div>
+              </div>
+              <div class="controls">
+                <button class="btn-primary btn-sm" (click)="decide(r.membership_id, 'approved')" [disabled]="busy()">Approve</button>
+                <button class="btn-danger btn-sm" (click)="decide(r.membership_id, 'denied')" [disabled]="busy()">Deny</button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="card list-card" *ngIf="selectedEventId()">
-          <h2>Bidders ({{ bidders().length }})</h2>
+        <div class="card list-card">
+          <h2>Bidders ({{ accepted().length }})</h2>
+          <p class="muted">Accepted bidders are users approved for at least one auction.</p>
+
           <div class="scroll-area">
             <table>
               <thead>
                 <tr>
-                  <th (click)="toggleSort('bidder_num')"># {{ sortColumn() === 'bidder_num' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
-                  <th (click)="toggleSort('bidder_last_name')">Name {{ sortColumn() === 'bidder_last_name' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
-                  <th (click)="toggleSort('bidder_email')">Email {{ sortColumn() === 'bidder_email' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
-                  <th>Action</th>
+                  <th>User</th>
+                  <th>Event</th>
+                  <th>Status</th>
+                  <th>Requested</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let b of sortedBidders()" (click)="select(b)" [class.selected]="existingId() === b.bidder_id">
-                  <td>{{ b.bidder_num ?? '—' }}</td>
-                  <td>{{ b.bidder_first_name }} {{ b.bidder_last_name }}</td>
-                  <td>{{ b.bidder_email ?? '—' }}</td>
-                  <td>
-                    <button class="btn-danger btn-sm" (click)="delete($event, b.bidder_id)">Delete</button>
-                  </td>
+                <tr *ngFor="let a of accepted()">
+                  <td>{{ a.username }}</td>
+                  <td>{{ a.event_desc }}</td>
+                  <td><b>{{ a.status }}</b></td>
+                  <td>{{ a.requested_at }}</td>
                 </tr>
               </tbody>
             </table>
@@ -95,215 +109,139 @@ import { EventRow, BidderRow } from "../api.types";
     .card { padding: 20px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #000; }
     .row { margin-bottom: 15px; }
     label { display: block; margin-bottom: 5px; font-weight: bold; color: #000; }
-    input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; color: #000; background: white; }
-    .actions { display: flex; gap: 10px; margin-top: 20px; }
+    input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; color: #000; background: white; }
+    .actions { display: flex; gap: 10px; margin-top: 10px; }
     button { padding: 10px 20px; cursor: pointer; border-radius: 4px; border: none; font-weight: 500; }
     .btn-primary { background: #007bff; color: white; }
     .btn-secondary { background: #6c757d; color: white; }
     .btn-danger { background: #dc3545; color: white; }
-    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-sm { padding: 6px 10px; font-size: 12px; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .scroll-area { max-height: 500px; overflow-y: auto; }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; cursor: pointer; user-select: none; }
-    td { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-    tr:hover td { background: #f8f9fa; }
-    tr.selected td { background: #e7f1ff; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; user-select: none; }
+    td { padding: 10px; border-bottom: 1px solid #eee; }
     .ok { color: #28a745; margin-top: 10px; font-weight: bold; }
     .error { color: #dc3545; margin-top: 10px; font-weight: bold; }
-    .info-card { padding: 40px; text-align: center; color: #000; font-style: italic; }
     .asterisk { color: #dc3545; }
-    input:required:invalid { border-color: rgba(220, 53, 69, 0.5); }
-    input:required:valid { border-color: rgba(40, 167, 69, 0.3); }
+    .muted { opacity: 0.8; font-size: 13px; margin-top: 0; }
+    .divider { height: 1px; background: rgba(0,0,0,0.08); margin: 16px 0; }
+    code { background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 6px; }
+
+    .list { display: grid; gap: 10px; margin-top: 10px; }
+    .row-line { display:flex; justify-content: space-between; gap: 12px; align-items:center; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 10px 12px; }
+    .title2 { font-weight: 800; }
+    .meta { font-size: 12px; opacity: 0.85; }
+    .controls { display:flex; gap: 8px; }
   `]
 })
 export class BidderFormComponent implements OnInit {
-  fixedEventId = signal<number | null>(null);
-  selectedEventId = signal<number | null>(null);
-  eventName = signal<string | null>(null);
-
-  firstName = "";
-  lastName = "";
-  email = "";
-  bidderNum = "";
-  existingId = signal<number | null>(null);
-  bidders = signal<BidderRow[]>([]);
-  sortColumn = signal<keyof BidderRow | null>(null);
-  sortDirection = signal<'asc' | 'desc'>('asc');
-
-  sortedBidders = computed(() => {
-    const data = [...this.bidders()];
-    const col = this.sortColumn();
-    const dir = this.sortDirection();
-    if (!col) return data;
-
-    return data.sort((a, b) => {
-      const aVal = a[col];
-      const bVal = b[col];
-      if (aVal === bVal) return 0;
-      if (aVal === null || aVal === undefined) return 1;
-      if (bVal === null || bVal === undefined) return -1;
-
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-
-      return dir === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal < bVal ? 1 : -1);
-    });
-  });
-
   busy = signal(false);
   success = signal<string | null>(null);
   error = signal<string | null>(null);
 
+  newUsername = '';
+
+  users = signal<any[]>([]);
+  events = signal<any[]>([]);
+
+  manualUserId: number | null = null;
+  manualEventId: number | null = null;
+
+  pending = signal<any[]>([]);
+  loadingPending = signal(true);
+
+  accepted = signal<any[]>([]);
+
   constructor(
     private api: ApiService,
-    private route: ActivatedRoute,
     private router: Router
   ) { }
 
   async ngOnInit() {
-    const locator = this.route.snapshot.queryParamMap.get("event_locator");
-    const id = this.route.snapshot.queryParamMap.get("event_id");
-
-    if (locator) {
-      try {
-        const events = await firstValueFrom(this.api.listEvents(undefined, locator));
-        if (events.length > 0) {
-          const ev = events[0];
-          this.fixedEventId.set(ev.event_id);
-          this.selectedEventId.set(ev.event_id);
-          this.eventName.set(ev.event_desc);
-          await this.refresh();
-        }
-      } catch (e) { }
-    } else if (id) {
-      const eventId = Number(id);
-      this.fixedEventId.set(eventId);
-      this.selectedEventId.set(eventId);
-      await this.loadEventInfo(eventId);
-      await this.refresh();
-    }
+    await this.loadAll();
   }
 
-  async loadEventInfo(id: number) {
-    try {
-      // listEvents doesn't have getById, so we list and filter locally or use lookup
-      // For now just list all and find (small number of events)
-      const events = await firstValueFrom(this.api.listEvents());
-      const ev = events.find(e => e.event_id === id);
-      if (ev) this.eventName.set(ev.event_desc);
-    } catch (e) { }
-  }
-
-  searchEvents = (q: string) => this.api.listEvents(q);
-  eventFormatter = (e: EventRow) => e.event_desc;
-
-  async onEventSelected(e: EventRow) {
-    this.selectedEventId.set(e.event_id);
-    this.eventName.set(e.event_desc);
-    await this.refresh();
-  }
-
-  async refresh() {
-    const id = this.selectedEventId();
-    if (!id) return;
-    try {
-      const list = await firstValueFrom(this.api.listBidders(id));
-      this.bidders.set(list);
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  select(b: BidderRow) {
-    this.firstName = b.bidder_first_name;
-    this.lastName = b.bidder_last_name;
-    this.email = b.bidder_email || "";
-    this.bidderNum = b.bidder_num?.toString() || "";
-    this.existingId.set(b.bidder_id);
-  }
-
-  cancel() {
-    this.firstName = "";
-    this.lastName = "";
-    this.email = "";
-    this.bidderNum = "";
-    this.existingId.set(null);
+  async loadAll() {
+    this.busy.set(true);
     this.success.set(null);
     this.error.set(null);
+
+    try {
+      const [users, auctions, pending, approved] = await Promise.all([
+        firstValueFrom(this.api.listUsers()),
+        firstValueFrom(this.api.listAuctions()),
+        firstValueFrom(this.api.listPendingMemberships()),
+        firstValueFrom(this.api.approvedMemberships()),
+      ]);
+
+      this.users.set(users);
+      this.events.set(auctions);
+      this.pending.set(pending);
+      this.accepted.set(approved);
+      this.loadingPending.set(false);
+    } catch (e) {
+      this.error.set('Could not load bidder data.');
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  resetNewUser() {
+    this.newUsername = '';
+  }
+
+  async createUser() {
+    this.busy.set(true);
+    this.success.set(null);
+    this.error.set(null);
+    try {
+      await firstValueFrom(this.api.createUser(this.newUsername, 'pass'));
+      this.success.set(`Created user ${this.newUsername} (password: pass)`);
+      this.resetNewUser();
+      await this.loadAll();
+    } catch (e: any) {
+      if (e?.status === 409 || e?.error?.error === 'UsernameAlreadyExists') {
+        this.error.set('Username already exists.');
+      } else {
+        this.error.set('Could not create user.');
+      }
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async decide(id: number, status: 'approved' | 'denied') {
+    this.busy.set(true);
+    try {
+      await firstValueFrom(this.api.decideMembership(id, status));
+      this.success.set(`Request ${status}.`);
+      await this.loadAll();
+    } catch {
+      this.error.set('Could not update request.');
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async manualAdd() {
+    if (!this.manualUserId || !this.manualEventId) return;
+    const user = this.users().find(u => u.user_id === this.manualUserId);
+    if (!user) return;
+
+    this.busy.set(true);
+    try {
+      await firstValueFrom(this.api.adminAddMember(this.manualEventId, user.username));
+      this.success.set('Member approved.');
+      await this.loadAll();
+    } catch {
+      this.error.set('Could not add member.');
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   back() {
-    if (this.fixedEventId()) {
-      // Probably came from User Dashboard? Need to know locator.
-      // Simplified: just go back in history.
-      window.history.back();
-    } else {
-      this.router.navigate(["/admin"]);
-    }
-  }
-
-  async save() {
-    if (!this.selectedEventId()) return;
-    this.busy.set(true);
-    this.success.set(null);
-    this.error.set(null);
-    try {
-      if (this.existingId()) {
-        const res = await firstValueFrom(this.api.updateBidder(this.existingId()!, {
-          event_id: this.selectedEventId()!,
-          bidder_first_name: this.firstName,
-          bidder_last_name: this.lastName,
-          bidder_email: this.email || null,
-          bidder_num: this.bidderNum ? Number(this.bidderNum) : null
-        }));
-        this.success.set(`Updated bidder ${res.bidder_id}`);
-        this.cancel();
-        await this.refresh();
-      } else {
-        const res = await firstValueFrom(this.api.createBidder({
-          event_id: this.selectedEventId()!,
-          bidder_first_name: this.firstName,
-          bidder_last_name: this.lastName,
-          bidder_email: this.email || null,
-          bidder_num: this.bidderNum ? Number(this.bidderNum) : null
-        }));
-        this.success.set(`Created bidder ${res.bidder_id}`);
-        this.cancel();
-        await this.refresh();
-      }
-    } catch (e: any) {
-      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error saving bidder";
-      this.error.set(errorMsg);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  async delete(ev: MouseEvent, id: number) {
-    ev.stopPropagation();
-    if (!confirm("Are you sure you want to delete this bidder?")) return;
-    this.busy.set(true);
-    try {
-      await firstValueFrom(this.api.deleteBidder(id));
-      if (this.existingId() === id) this.cancel();
-      await this.refresh();
-      this.success.set("Deleted bidder.");
-    } catch (e: any) {
-      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error deleting bidder";
-      this.error.set(errorMsg);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  toggleSort(col: keyof BidderRow) {
-    if (this.sortColumn() === col) {
-      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
-    } else {
-      this.sortColumn.set(col);
-      this.sortDirection.set('asc');
-    }
+    this.router.navigate(["/admin"]);
   }
 }

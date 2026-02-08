@@ -127,11 +127,10 @@ export class LoginComponent implements OnInit {
   private redirectBySession(user: any) {
     if (user?.role === 'admin') {
       this.router.navigate(['/admin']);
-    } else if (user?.role === 'user' && user?.event_locator) {
-      this.router.navigate([`/user/${user.event_locator}`]);
+    } else if (user?.role === 'user') {
+      this.router.navigate(['/user']);
     } else {
       this.router.navigate(['/']);
     }
   }
 }
-

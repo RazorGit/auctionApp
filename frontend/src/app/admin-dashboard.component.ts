@@ -17,26 +17,14 @@ import { EventRow } from "./api.types";
       <div class="grid">
         <a class="card clickable" routerLink="/events">
           <h2>Events</h2>
-          <p>Create and manage auction events.</p>
+          <p>Create and manage auction events (including start/stop controls).</p>
         </a>
 
-        <div class="card">
+        <a class="card clickable" routerLink="/bidders">
           <h2>Bidders</h2>
           <p>Manage bidders and registrations.</p>
-
-          <div class="loading" *ngIf="loading()">Loading events…</div>
-          <div class="error" *ngIf="!loading() && error()">{{ error() }}</div>
-
-          <div class="row" *ngIf="!loading() && !error()">
-            <label>Event</label>
-            <select [(ngModel)]="selectedBidderLocator">
-              <option *ngFor="let e of events()" [ngValue]="e.event_locator">
-                {{ e.event_desc }} ({{ e.event_locator }})
-              </option>
-            </select>
-            <button class="btn-primary" (click)="openBidders()" [disabled]="!selectedBidderLocator">Open</button>
-          </div>
-        </div>
+          <div class="hint">Create users, approve join requests, and assign bidders to auctions.</div>
+        </a>
 
         <div class="card">
           <h2>Items</h2>
@@ -56,10 +44,23 @@ import { EventRow } from "./api.types";
           </div>
         </div>
 
-        <a class="card clickable" routerLink="/winning-bids">
+        <div class="card">
           <h2>Winning Bids</h2>
           <p>Record and view winning bids.</p>
-        </a>
+
+          <div class="loading" *ngIf="loading()">Loading events…</div>
+          <div class="error" *ngIf="!loading() && error()">{{ error() }}</div>
+
+          <div class="row" *ngIf="!loading() && !error()">
+            <label>Event</label>
+            <select [(ngModel)]="selectedWinningLocator">
+              <option *ngFor="let e of events()" [ngValue]="e.event_locator">
+                {{ e.event_desc }} ({{ e.event_locator }})
+              </option>
+            </select>
+            <button class="btn-primary" (click)="openWinningBids()" [disabled]="!selectedWinningLocator">Open</button>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -114,8 +115,8 @@ export class AdminDashboardComponent implements OnInit {
   loading = signal(true);
   error = signal<string | null>(null);
 
-  selectedBidderLocator = "";
   selectedItemLocator = "";
+  selectedWinningLocator = "";
 
   constructor(private api: ApiService, private router: Router) { }
 
@@ -133,29 +134,28 @@ export class AdminDashboardComponent implements OnInit {
 
       if (!rows.length) {
         this.error.set("No events exist yet. Create one first.");
-        this.selectedBidderLocator = "";
         this.selectedItemLocator = "";
         return;
       }
 
-      this.selectedBidderLocator = rows[0].event_locator;
       this.selectedItemLocator = rows[0].event_locator;
+      this.selectedWinningLocator = rows[0].event_locator;
     } catch (e) {
       this.error.set("Could not load events. Please try again.");
-      this.selectedBidderLocator = "";
       this.selectedItemLocator = "";
+      this.selectedWinningLocator = "";
     } finally {
       this.loading.set(false);
     }
   }
 
-  openBidders() {
-    if (!this.selectedBidderLocator) return;
-    this.router.navigate(["/bidders"], { queryParams: { event_locator: this.selectedBidderLocator } });
-  }
-
   openItems() {
     if (!this.selectedItemLocator) return;
     this.router.navigate(["/items"], { queryParams: { event_locator: this.selectedItemLocator } });
+  }
+
+  openWinningBids() {
+    if (!this.selectedWinningLocator) return;
+    this.router.navigate(["/winning-bids"], { queryParams: { event_locator: this.selectedWinningLocator } });
   }
 }

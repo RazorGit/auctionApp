@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from "@angular/common/http";
 import { Injectable } from "@angular/core";
 import { BidderRow, EventRow, ItemRow, WinningBidRow, LoginResponse, SessionResponse } from "./api.types";
+import { firstValueFrom } from "rxjs";
 
 @Injectable({ providedIn: "root" })
 export class ApiService {
@@ -107,6 +108,56 @@ export class ApiService {
         return this.http.put<WinningBidRow>(`${this.base}/winning-bids/${id}`, payload, { withCredentials: true });
     }
 
+    listAuctions(status?: 'scheduled' | 'ongoing' | 'ended') {
+        let params = new HttpParams();
+        if (status) params = params.set('status', status);
+        return this.http.get<any[]>(`${this.base}/auctions`, { params, withCredentials: true });
+    }
+
+    getAuctionByLocator(locator: string) {
+        const params = new HttpParams().set('lookup', locator);
+        // backend /events already supports lookup; for users it will return only their assigned event.
+        return this.http.get<any[]>(`${this.base}/events`, { params, withCredentials: true });
+    }
+
+    myMemberships() {
+        return this.http.get<any[]>(`${this.base}/memberships/me`, { withCredentials: true });
+    }
+
+    requestMembership(eventId: number) {
+        return this.http.post<any>(`${this.base}/memberships`, { event_id: eventId }, { withCredentials: true });
+    }
+
+    listPendingMemberships() {
+        return this.http.get<any[]>(`${this.base}/admin/memberships/pending`, { withCredentials: true });
+    }
+
+    decideMembership(membershipId: number, status: 'approved' | 'denied') {
+        return this.http.post<any>(`${this.base}/admin/memberships/${membershipId}/decide`, { status }, { withCredentials: true });
+    }
+
+    adminAddMember(eventId: number, username: string) {
+        return this.http.post<any>(`${this.base}/admin/auctions/${eventId}/members`, { username }, { withCredentials: true });
+    }
+
+    startAuction(eventId: number, timeLimitSeconds: number | null) {
+        return this.http.post<any>(`${this.base}/admin/auctions/${eventId}/start`, { time_limit_seconds: timeLimitSeconds }, { withCredentials: true });
+    }
+
+    stopAuction(eventId: number) {
+        return this.http.post<any>(`${this.base}/admin/auctions/${eventId}/stop`, {}, { withCredentials: true });
+    }
+
+    listBids(eventId: number, itemId?: number) {
+        let params = new HttpParams().set('event_id', String(eventId));
+        if (itemId) params = params.set('item_id', String(itemId));
+        return this.http.get<any[]>(`${this.base}/bids`, { params, withCredentials: true });
+    }
+
+    placeBid(eventId: number, itemId: number, amount: number) {
+        return this.http.post<any>(`${this.base}/bids`, { event_id: eventId, item_id: itemId, amount }, { withCredentials: true });
+    }
+
     deleteEvent(id: number) {
         return this.http.delete<void>(`${this.base}/events/${id}`, { withCredentials: true });
     }
@@ -121,5 +172,17 @@ export class ApiService {
 
     deleteWinningBid(id: number) {
         return this.http.delete<void>(`${this.base}/winning-bids/${id}`, { withCredentials: true });
+    }
+
+    listUsers() {
+        return this.http.get<any[]>(`${this.base}/admin/users`, { withCredentials: true });
+    }
+
+    createUser(username: string, password: string = 'pass') {
+        return this.http.post<any>(`${this.base}/admin/users`, { username, password }, { withCredentials: true });
+    }
+
+    approvedMemberships() {
+        return this.http.get<any[]>(`${this.base}/admin/memberships/approved`, { withCredentials: true });
     }
 }

@@ -29,8 +29,30 @@ export const WinningBidCreate = z.object({
   winning_bid: z.number().nonnegative(),
 });
 
+export const MembershipRequestCreate = z.object({
+  event_id: z.number().int().positive(),
+});
+
+export const MembershipDecision = z.object({
+  status: z.enum(["approved", "denied"]),
+});
+
+export const AuctionStart = z.object({
+  time_limit_seconds: z.number().int().positive().max(60 * 60 * 24).nullable().optional(),
+});
+
+export const AuctionStop = z.object({
+  // allow admin to end early
+  ended: z.literal(true).optional(),
+});
+
+export const BidCreate = z.object({
+  event_id: z.number().int().positive(),
+  item_id: z.number().int().positive(),
+  amount: z.number().positive(),
+});
+
 export const EventUpdate = EventCreate;
 export const BidderUpdate = BidderCreate;
 export const ItemUpdate = ItemCreate;
 export const WinningBidUpdate = WinningBidCreate;
-
