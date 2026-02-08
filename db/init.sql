@@ -146,22 +146,22 @@ CREATE INDEX IF NOT EXISTS ix_winning_bids_item_id ON winning_bids(item_id);
 -- NOTE: This runs only on a fresh DB volume.
 -- ------------------------------------------------------------
 
+-- Clean slate for seeds on fresh volumes (idempotent in dev).
+-- If the DB is freshly created, these deletes are harmless.
+DELETE FROM bids;
+DELETE FROM event_memberships;
+DELETE FROM winning_bids;
+DELETE FROM users;
+DELETE FROM bidders;
+DELETE FROM items;
+DELETE FROM events;
+
 -- 3 demo events
 INSERT INTO events (event_desc, event_date, event_tax_id)
 VALUES
   ('Chinese Ming Vase Benefit Auction', DATE '2026-03-22', NULL),
   ('Dinosaur Fossil Fundraiser Night',  DATE '2026-04-05', NULL),
   ('Meteorite Fragment Charity Gala',   DATE '2026-04-19', NULL);
-
--- Bidders (a couple per event)
-INSERT INTO bidders (event_id, bidder_num, bidder_first_name, bidder_last_name, bidder_email, bidder_credit_card_token)
-VALUES
-  (1, 101, 'Aria',   'Chen',     'aria.chen@example.com',     NULL),
-  (1, 102, 'Miles',  'Harrington','miles.h@example.com',      NULL),
-  (2, 201, 'Nora',   'Gomez',    'nora.gomez@example.com',    NULL),
-  (2, 202, 'Theo',   'Kline',    'theo.kline@example.com',    NULL),
-  (3, 301, 'Sam',    'Okoye',    'sam.okoye@example.com',     NULL),
-  (3, 302, 'Priya',  'Iyer',     'priya.iyer@example.com',    NULL);
 
 -- Items (one headline item per event + a couple extras)
 INSERT INTO items (event_id, item_type, item_desc, item_notes)
@@ -173,13 +173,15 @@ VALUES
   (3, 'Live',     'Meteorite Fragment (Campo del Cielo)',  'Small iron meteorite slice (demo)'),
   (3, 'Not Live', 'Star map print',                        'Personalized to the event date');
 
--- Winning bids (one per event)
--- Bidder/item IDs are deterministic here because this is demo seed data in a fresh DB.
-INSERT INTO winning_bids (event_id, bidder_id, item_id, winning_bid)
+-- Bidders (kept for legacy CRUD screens)
+INSERT INTO bidders (event_id, bidder_num, bidder_first_name, bidder_last_name, bidder_email, bidder_credit_card_token)
 VALUES
-  (1, 2, 1, 1250.00),
-  (2, 4, 3, 980.00),
-  (3, 6, 5, 1430.00);
+  (1, 101, 'Aria',   'Chen',     'aria.chen@example.com',     NULL),
+  (1, 102, 'Miles',  'Harrington','miles.h@example.com',      NULL),
+  (2, 201, 'Nora',   'Gomez',    'nora.gomez@example.com',    NULL),
+  (2, 202, 'Theo',   'Kline',    'theo.kline@example.com',    NULL),
+  (3, 301, 'Sam',    'Okoye',    'sam.okoye@example.com',     NULL),
+  (3, 302, 'Priya',  'Iyer',     'priya.iyer@example.com',    NULL);
 
 -- App users
 -- admin/admin => "YWRtaW4="
@@ -187,17 +189,61 @@ VALUES
 INSERT INTO users (username, password_b64, role, event_id)
 VALUES
   ('admin', 'YWRtaW4=', 'admin', NULL),
-  ('user1', 'cGFzcw==', 'user', 1),
-  ('user2', 'cGFzcw==', 'user', 2),
-  ('user3', 'cGFzcw==', 'user', 3);
+  ('user1', 'cGFzcw==', 'user', NULL),
+  ('user2', 'cGFzcw==', 'user', NULL),
+  ('user3', 'cGFzcw==', 'user', NULL),
+  ('user4', 'cGFzcw==', 'user', NULL),
+  ('user5', 'cGFzcw==', 'user', NULL);
 
--- Seed memberships: attach user1/user2/user3 to their default event as approved (demo)
+-- Memberships: all five users are approved for event 1 and 2 (simulate active bidder pool)
 INSERT INTO event_memberships (event_id, user_id, status, requested_at, decided_at, decided_by_user_id)
-SELECT u.event_id, u.user_id, 'approved', now(), now(), (SELECT user_id FROM users WHERE username = 'admin')
-FROM users u
-WHERE u.role = 'user' AND u.event_id IS NOT NULL;
+SELECT e.event_id, u.user_id, 'approved', now(), now(), (SELECT user_id FROM users WHERE username = 'admin')
+FROM events e
+JOIN users u ON u.role = 'user'
+WHERE e.event_id IN (1,2);
 
--- Optionally mark seeded events as scheduled in the future by default
-UPDATE events SET status = 'scheduled', starts_at = NULL, ends_at = NULL, time_limit_seconds = NULL;
+-- Mark event 1 and 2 as ended so admin can view bid history.
+UPDATE events
+SET status = 'ended', starts_at = now() - interval '25 minutes', ends_at = now() - interval '5 minutes', time_limit_seconds = 1200
+WHERE event_id IN (1,2);
+
+-- Keep event 3 scheduled for live demo
+UPDATE events
+SET status = 'scheduled', starts_at = NULL, ends_at = NULL, time_limit_seconds = NULL
+WHERE event_id = 3;
+
+-- Simulate bidding wars on the two Live items (item_id 1 for event 1, item_id 3 for event 2)
+-- Event 1, Item 1 (user1 wins)
+INSERT INTO bids (event_id, item_id, user_id, amount, placed_at)
+SELECT 1, 1, (SELECT user_id FROM users WHERE username='user3'), 900.00, now() - interval '24 minutes'
+UNION ALL
+SELECT 1, 1, (SELECT user_id FROM users WHERE username='user4'), 1025.00, now() - interval '23 minutes'
+UNION ALL
+SELECT 1, 1, (SELECT user_id FROM users WHERE username='user5'), 1100.00, now() - interval '22 minutes'
+UNION ALL
+SELECT 1, 1, (SELECT user_id FROM users WHERE username='user2'), 1220.00, now() - interval '21 minutes'
+UNION ALL
+SELECT 1, 1, (SELECT user_id FROM users WHERE username='user1'), 1350.00, now() - interval '20 minutes';
+
+-- Event 2, Item 3 (user2 wins)
+INSERT INTO bids (event_id, item_id, user_id, amount, placed_at)
+SELECT 2, 3, (SELECT user_id FROM users WHERE username='user5'), 500.00, now() - interval '19 minutes'
+UNION ALL
+SELECT 2, 3, (SELECT user_id FROM users WHERE username='user1'), 650.00, now() - interval '18 minutes'
+UNION ALL
+SELECT 2, 3, (SELECT user_id FROM users WHERE username='user3'), 720.00, now() - interval '17 minutes'
+UNION ALL
+SELECT 2, 3, (SELECT user_id FROM users WHERE username='user4'), 780.00, now() - interval '16 minutes'
+UNION ALL
+SELECT 2, 3, (SELECT user_id FROM users WHERE username='user2'), 860.00, now() - interval '15 minutes';
+
+-- Winning bids are recorded in winning_bids using legacy bidder_ids.
+-- We map winners to existing seeded bidders deterministically:
+-- Event 1 winner -> bidder_id 2 (Miles Harrington)
+-- Event 2 winner -> bidder_id 4 (Theo Kline)
+INSERT INTO winning_bids (event_id, bidder_id, item_id, winning_bid)
+VALUES
+  (1, 2, 1, 1350.00),
+  (2, 4, 3, 860.00);
 
 COMMIT;

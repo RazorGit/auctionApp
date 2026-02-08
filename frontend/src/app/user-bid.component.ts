@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, Input, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -7,10 +7,11 @@ import { ApiService } from './api.service';
 
 @Component({
   standalone: true,
+  selector: 'app-user-bid',
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="container">
-      <h1>Place bids</h1>
+    <div class="container" [class.embedded]="embedded">
+      <h1 *ngIf="!embedded">Place bids</h1>
       <div class="muted" *ngIf="loading()">Loading…</div>
 
       <div *ngIf="!loading() && error()" class="error">{{ error() }}</div>
@@ -50,6 +51,7 @@ import { ApiService } from './api.service';
   `,
   styles: [`
     .container { padding: 24px 18px; max-width: 900px; margin: 0 auto; color:#000; }
+    .container.embedded { padding: 0; max-width: unset; }
     .card { background:#fff; border-radius:14px; padding:18px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
     .title { font-weight: 800; font-size: 18px; }
     .meta { font-size: 12px; opacity: 0.8; margin-bottom: 14px; }
@@ -67,6 +69,9 @@ import { ApiService } from './api.service';
   `]
 })
 export class UserBidComponent implements OnInit {
+  @Input() eventLocator: string | null = null;
+  @Input() embedded = false;
+
   locator = '';
   loading = signal(true);
   error = signal<string | null>(null);
@@ -81,7 +86,7 @@ export class UserBidComponent implements OnInit {
   constructor(private route: ActivatedRoute, private api: ApiService) {}
 
   async ngOnInit() {
-    this.locator = this.route.snapshot.paramMap.get('eventLocator') || '';
+    this.locator = this.eventLocator ?? (this.route.snapshot.paramMap.get('eventLocator') || '');
     await this.load();
   }
 

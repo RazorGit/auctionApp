@@ -185,4 +185,9 @@ export class ApiService {
     approvedMemberships() {
         return this.http.get<any[]>(`${this.base}/admin/memberships/approved`, { withCredentials: true });
     }
+
+    adminBidHistory(eventId: number) {
+        const params = new HttpParams().set('event_id', String(eventId));
+        return this.http.get<any>(`${this.base}/admin/bids/history`, { params, withCredentials: true });
+    }
 }

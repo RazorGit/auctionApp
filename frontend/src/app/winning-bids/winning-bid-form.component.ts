@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from "@angular/router";
 import { ApiService } from "../api.service";
 import { firstValueFrom } from "rxjs";
 import { TypeaheadComponent } from "../typeahead/typeahead.component";
-import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
+import { EventRow } from "../api.types";
 
 @Component({
   standalone: true,
@@ -14,7 +14,7 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
     <div class="container">
       <div class="header">
         <button class="btn-secondary" (click)="back()">← Back</button>
-        <h1>{{ eventName() ? eventName() + ': ' : '' }}Winning Bid Management</h1>
+        <h1>{{ eventName() ? eventName() + ': ' : '' }}Bids History</h1>
       </div>
 
       <div class="grid">
@@ -30,69 +30,46 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
             ></app-typeahead>
           </div>
 
-          <div *ngIf="selectedEventId()" [attr.data-key]="formKey()">
-            <h2>{{ existingId() ? 'Update' : 'New' }} Winning Bid</h2>
-            <div class="row">
-              <label class="required-label">Item <span class="asterisk">*</span></label>
-              <ng-container *ngIf="formKey() >= 0">
-                <app-typeahead
-                  [searchFn]="searchItems"
-                  [formatter]="itemFormatter"
-                  [initialValue]="initialItem"
-                  placeholder="Search Item..."
-                  (selected)="onItemSelected($event)"
-                  [required]="true"
-                ></app-typeahead>
-              </ng-container>
+          <div *ngIf="selectedEventId()" class="info">
+            <div class="muted">
+              This screen shows bid history only for <b>ended</b> auctions. Winning bids are highlighted.
             </div>
-            <div class="row">
-              <label class="required-label">Bidder <span class="asterisk">*</span></label>
-              <ng-container *ngIf="formKey() >= 0">
-                <app-typeahead
-                  [searchFn]="searchBidders"
-                  [formatter]="bidderFormatter"
-                  [initialValue]="initialBidder"
-                  placeholder="Search Bidder..."
-                  (selected)="onBidderSelected($event)"
-                  [required]="true"
-                ></app-typeahead>
-              </ng-container>
-            </div>
-            <div class="row">
-              <label class="required-label">Amount <span class="asterisk">*</span></label>
-              <input [(ngModel)]="amount" type="number" required />
-            </div>
-            <div class="actions">
-              <button class="btn-primary" (click)="save()" [disabled]="busy() || !selectedBidderId() || !selectedItemId() || !amount">Save</button>
-              <button class="btn-secondary" (click)="cancel()">Cancel</button>
-            </div>
-            <div class="ok" *ngIf="success()">{{ success() }}</div>
+
             <div class="error" *ngIf="error()">{{ error() }}</div>
-          </div>
-          <div *ngIf="!selectedEventId()" class="info-card">
-            Please select an event to manage winning bids.
+            <div class="muted" *ngIf="loading()">Loading…</div>
+
+            <div *ngIf="!loading() && !error() && !groups().length" class="muted">
+              No bids found for this ended auction.
+            </div>
           </div>
         </div>
 
         <div class="card list-card" *ngIf="selectedEventId()">
-          <h2>Winning Bids ({{ winningBids().length }})</h2>
-          <div class="scroll-area">
-            <table>
+          <h2>Bid history</h2>
+
+          <div class="group" *ngFor="let g of groups()">
+            <div class="group-head">
+              <div class="title">Item: {{ g.item_desc }}</div>
+              <div class="meta">Item ID: {{ g.item_id }} • Bids: {{ g.bids.length }}</div>
+            </div>
+
+            <table *ngIf="g.bids.length">
               <thead>
                 <tr>
-                  <th (click)="toggleSort('bidder_last_name')">Bidder {{ sortColumn() === 'bidder_last_name' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
-                  <th (click)="toggleSort('item_desc')">Item {{ sortColumn() === 'item_desc' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
-                  <th (click)="toggleSort('winning_bid')">Amt {{ sortColumn() === 'winning_bid' ? (sortDirection() === 'asc' ? '↑' : '↓') : '' }}</th>
-                  <th>Action</th>
+                  <th>Time</th>
+                  <th>User</th>
+                  <th>Amount</th>
+                  <th>Result</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let wb of sortedWinningBids()" (click)="select(wb)" [class.selected]="existingId() === wb.winning_bid_id">
-                  <td>{{ wb.bidder_first_name }} {{ wb.bidder_last_name }}</td>
-                  <td>{{ wb.item_desc }}</td>
-                  <td>{{ wb.winning_bid }}</td>
+                <tr *ngFor="let b of g.bids" [class.winner]="b.isWinner">
+                  <td>{{ b.placed_at }}</td>
+                  <td>{{ b.username }}</td>
+                  <td><b>{{ b.amount }}</b></td>
                   <td>
-                    <button class="btn-danger btn-sm" (click)="delete($event, wb.winning_bid_id)">Delete</button>
+                    <span *ngIf="b.isWinner" class="badge-win">WINNER</span>
+                    <span *ngIf="!b.isWinner" class="badge-lose">—</span>
                   </td>
                 </tr>
               </tbody>
@@ -105,30 +82,28 @@ import { EventRow, BidderRow, ItemRow, WinningBidRow } from "../api.types";
   styles: [`
     .container { padding: 20px; max-width: 1200px; margin: 0 auto; }
     .header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
     .card { padding: 20px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #000; }
     .row { margin-bottom: 15px; }
     label { display: block; margin-bottom: 5px; font-weight: bold; color: #000; }
-    input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; color: #000; background: white; }
-    .actions { display: flex; gap: 10px; margin-top: 20px; }
-    button { padding: 10px 20px; cursor: pointer; border-radius: 4px; border: none; font-weight: 500; }
-    .btn-primary { background: #007bff; color: white; }
-    .btn-secondary { background: #6c757d; color: white; }
-    .btn-danger { background: #dc3545; color: white; }
-    .btn-sm { padding: 5px 10px; font-size: 12px; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .scroll-area { max-height: 500px; overflow-y: auto; }
+
+    .muted { opacity: 0.78; }
+    .error { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(220, 53, 69, 0.35); background: rgba(220, 53, 69, 0.08); margin-top: 10px; }
+
+    .group { border: 1px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 12px; margin: 12px 0; }
+    .group-head { display:flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 10px; }
+    .title { font-weight: 900; }
+    .meta { font-size: 12px; opacity: 0.8; }
+
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; cursor: pointer; user-select: none; }
-    td { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-    tr:hover td { background: #f8f9fa; }
-    tr.selected td { background: #e7f1ff; }
-    .ok { color: #28a745; margin-top: 10px; font-weight: bold; }
-    .error { color: #dc3545; margin-top: 10px; font-weight: bold; }
-    .info-card { padding: 40px; text-align: center; color: #000; font-style: italic; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid #eee; user-select: none; font-size: 12px; }
+    td { padding: 10px; border-bottom: 1px solid #eee; }
+
+    tr.winner td { background: rgba(40, 167, 69, 0.10); }
+    .badge-win { display:inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(40,167,69,0.15); border: 1px solid rgba(40,167,69,0.35); color: #1e7e34; font-weight: 900; font-size: 12px; }
+    .badge-lose { opacity: 0.6; }
+
     .asterisk { color: #dc3545; }
-    input:required:invalid { border-color: rgba(220, 53, 69, 0.5); }
-    input:required:valid { border-color: rgba(40, 167, 69, 0.3); }
   `]
 })
 export class WinningBidFormComponent implements OnInit {
@@ -136,50 +111,40 @@ export class WinningBidFormComponent implements OnInit {
   selectedEventId = signal<number | null>(null);
   eventName = signal<string | null>(null);
 
-  selectedBidderId = signal<number | null>(null);
-  selectedItemId = signal<number | null>(null);
-  initialBidder: string | null = null;
-  initialItem: string | null = null;
-
-  amount = "";
-  existingId = signal<number | null>(null);
-  winningBids = signal<WinningBidRow[]>([]);
-  formKey = signal(0); // Used to force re-render of typeaheads
-
-  sortColumn = signal<keyof WinningBidRow | null>(null);
-  sortDirection = signal<'asc' | 'desc'>('asc');
-
-  sortedWinningBids = computed(() => {
-    const data = [...this.winningBids()];
-    const col = this.sortColumn();
-    const dir = this.sortDirection();
-    if (!col) return data;
-
-    return data.sort((a, b) => {
-      // Special case for amount (which is stored as string but should sort numerically)
-      if (col === 'winning_bid') {
-        const aNum = parseFloat(a.winning_bid || '0');
-        const bNum = parseFloat(b.winning_bid || '0');
-        return dir === 'asc' ? aNum - bNum : bNum - aNum;
-      }
-
-      const aVal = a[col];
-      const bVal = b[col];
-      if (aVal === bVal) return 0;
-      if (aVal === null || aVal === undefined) return 1;
-      if (bVal === null || bVal === undefined) return -1;
-
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-
-      return dir === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal < bVal ? 1 : -1);
-    });
-  });
-
-  busy = signal(false);
-  success = signal<string | null>(null);
+  loading = signal(false);
   error = signal<string | null>(null);
+
+  rawBids = signal<any[]>([]);
+
+  groups = computed(() => {
+    const rows = this.rawBids();
+    const byItem = new Map<number, any>();
+
+    for (const r of rows) {
+      const itemId = Number(r.item_id);
+      if (!byItem.has(itemId)) {
+        byItem.set(itemId, {
+          item_id: itemId,
+          item_desc: r.item_desc,
+          winning_bid: r.winning_bid ?? null,
+          bids: [] as any[],
+        });
+      }
+      const g = byItem.get(itemId);
+      g.winning_bid = g.winning_bid ?? r.winning_bid ?? null;
+      g.bids.push({ ...r, isWinner: false });
+    }
+
+    for (const g of byItem.values()) {
+      const win = g.winning_bid;
+      if (win === null || win === undefined) continue;
+      // Mark the bid that matches the recorded winning_bid for the item.
+      const winner = g.bids.find((b: any) => String(b.amount) === String(win));
+      if (winner) winner.isWinner = true;
+    }
+
+    return Array.from(byItem.values());
+  });
 
   constructor(
     private api: ApiService,
@@ -222,59 +187,32 @@ export class WinningBidFormComponent implements OnInit {
   searchEvents = (q: string) => this.api.listEvents(q);
   eventFormatter = (e: EventRow) => e.event_desc;
 
-  searchBidders = (q: string) => this.api.listBidders(this.selectedEventId()!, q);
-  bidderFormatter = (b: BidderRow) => `${b.bidder_first_name} ${b.bidder_last_name} (${b.bidder_id})`;
-
-  searchItems = (q: string) => this.api.listItems(this.selectedEventId()!, q);
-  itemFormatter = (i: ItemRow) => i.item_desc;
-
   async onEventSelected(e: EventRow) {
     this.selectedEventId.set(e.event_id);
     this.eventName.set(e.event_desc);
-    this.cancel();
     await this.refresh();
-  }
-
-  onBidderSelected(b: BidderRow) {
-    this.selectedBidderId.set(b.bidder_id);
-  }
-  onItemSelected(i: ItemRow) {
-    this.selectedItemId.set(i.item_id);
   }
 
   async refresh() {
     const id = this.selectedEventId();
     if (!id) return;
-    try {
-      const list = await firstValueFrom(this.api.listWinningBids(id));
-      this.winningBids.set(list);
-    } catch (e) {
-      console.error(e);
-    }
-  }
 
-  select(wb: WinningBidRow) {
-    this.selectedBidderId.set(wb.bidder_id);
-    this.selectedItemId.set(wb.item_id);
-    this.amount = wb.winning_bid.toString();
-    this.existingId.set(wb.winning_bid_id);
-    this.initialBidder = `${wb.bidder_first_name} ${wb.bidder_last_name} (${wb.bidder_id})`;
-    this.initialItem = wb.item_desc || "";
-  }
-
-  cancel() {
-    this.selectedBidderId.set(null);
-    this.selectedItemId.set(null);
-    this.amount = "";
-    this.existingId.set(null);
-    this.initialBidder = null;
-    this.initialItem = null;
-    this.success.set(null);
+    this.loading.set(true);
     this.error.set(null);
-    // Temporarily hide form to force typeahead recreation
-    const currentKey = this.formKey();
-    this.formKey.set(-1);
-    setTimeout(() => this.formKey.set(currentKey + 1), 0);
+    this.rawBids.set([]);
+
+    try {
+      const res = await firstValueFrom(this.api.adminBidHistory(id));
+      this.rawBids.set(res.bids ?? []);
+    } catch (e: any) {
+      if (e?.status === 409) {
+        this.error.set('This auction is not ended yet. Stop the auction first to view bid history.');
+      } else {
+        this.error.set('Could not load bid history.');
+      }
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   back() {
@@ -282,67 +220,6 @@ export class WinningBidFormComponent implements OnInit {
       window.history.back();
     } else {
       this.router.navigate(["/admin"]);
-    }
-  }
-
-  async save() {
-    if (!this.selectedEventId() || !this.selectedBidderId() || !this.selectedItemId()) return;
-    this.busy.set(true);
-    this.success.set(null);
-    this.error.set(null);
-    try {
-      if (this.existingId()) {
-        const res = await firstValueFrom(this.api.updateWinningBid(this.existingId()!, {
-          event_id: this.selectedEventId()!,
-          bidder_id: this.selectedBidderId()!,
-          item_id: this.selectedItemId()!,
-          winning_bid: Number(this.amount)
-        }));
-        this.success.set(`Updated winning bid ${res.winning_bid_id}`);
-        this.cancel();
-        await this.refresh();
-      } else {
-        const res = await firstValueFrom(this.api.createWinningBid({
-          event_id: this.selectedEventId()!,
-          bidder_id: this.selectedBidderId()!,
-          item_id: this.selectedItemId()!,
-          winning_bid: Number(this.amount)
-        }));
-        this.success.set(`Recorded winning bid ${res.winning_bid_id}`);
-        this.cancel();
-        await this.refresh();
-      }
-    } catch (e: any) {
-      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error saving winning bid";
-      this.error.set(errorMsg);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  async delete(ev: MouseEvent, id: number) {
-    ev.stopPropagation();
-    if (!confirm("Are you sure you want to delete this winning bid?")) return;
-    this.busy.set(true);
-    try {
-      await firstValueFrom(this.api.deleteWinningBid(id));
-      if (this.existingId() === id) this.cancel();
-      await this.refresh();
-      this.success.set("Deleted winning bid.");
-    } catch (e: any) {
-      const errorMsg = e?.error?.details?.[0]?.message || e?.error?.message || e?.message || "Error deleting winning bid";
-      this.error.set(errorMsg);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  toggleSort(col: keyof WinningBidRow) {
-    if (this.sortColumn() === col) {
-      this.sortDirection.set(this.sortDirection() === 'asc' ? 'desc' : 'asc');
-    } else {
-      this.sortColumn.set(col);
-      this.sortDirection.set('asc');
     }
   }
 }

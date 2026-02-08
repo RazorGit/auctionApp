@@ -69,7 +69,14 @@ import { EventRow } from "../api.types";
                   <td>{{ e.event_date }}</td>
                   <td><b>{{ getStatus(e) }}</b></td>
                   <td>
-                    <button class="btn-danger btn-sm" (click)="delete($event, e.event_id)">Delete</button>
+                    <button
+                      class="btn-danger btn-sm"
+                      (click)="delete($event, e.event_id)"
+                      [disabled]="getStatus(e) === 'ongoing'"
+                      [title]="getStatus(e) === 'ongoing' ? 'Cannot delete an ongoing event' : 'Delete event'"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               </tbody>

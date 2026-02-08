@@ -16,7 +16,6 @@ import { SessionUser } from "./api.types";
         <b class="brand" (click)="goHomeByRole()">Auction Webapp</b>
         <span class="sep">|</span>
         <span>{{ u.username }}</span>
-        <span class="pill">{{ u.role }}</span>
       </div>
       <button class="link" (click)="logoff()">Log off</button>
     </div>
@@ -39,7 +38,6 @@ import { SessionUser } from "./api.types";
     .left { display: flex; gap: 10px; align-items: center; }
     .brand { cursor: pointer; }
     .sep { opacity: 0.4; }
-    .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,0.06); }
     .link { background: transparent; border: none; color: #007bff; cursor: pointer; }
   `]
 })

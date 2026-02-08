@@ -875,6 +875,55 @@ export function createApp() {
     }
   });
 
+  // -------------------------
+  // Admin: Bid history for ended auctions
+  // -------------------------
+  app.get("/admin/bids/history", requireRole("admin"), async (req, res, next) => {
+    try {
+      const parsed = z.object({
+        event_id: z.coerce.number().int().positive(),
+      }).safeParse(req.query);
+      if (!parsed.success) return res.status(400).json({ error: 'BadRequest' });
+
+      const eventId = parsed.data.event_id;
+
+      const ev = await getEventById(eventId);
+      if (!ev) return res.status(404).json({ error: 'NotFound' });
+      if (ev.status !== 'ended') return res.status(409).json({ error: 'AuctionNotEnded' });
+
+      // Fetch all bids, with winner metadata if exists.
+      const r = await query(
+        `select
+            b.bid_id,
+            b.event_id,
+            b.item_id,
+            i.item_desc,
+            b.user_id,
+            u.username,
+            b.amount,
+            b.placed_at,
+            wb.winning_bid_id,
+            wb.winning_bid,
+            wb.bidder_id as winning_bidder_id
+         from bids b
+         join users u on u.user_id = b.user_id
+         join items i on i.item_id = b.item_id
+         left join winning_bids wb
+           on wb.event_id = b.event_id and wb.item_id = b.item_id
+         where b.event_id = $1
+         order by b.placed_at asc`,
+        [eventId],
+      );
+
+      res.json({
+        event: { event_id: ev.event_id, event_desc: ev.event_desc, status: ev.status },
+        bids: r.rows,
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.use((err, _req, res, _next) => {
     const status = err?.status || 500;
     res.status(status).json({
