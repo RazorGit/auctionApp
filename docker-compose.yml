@@ -22,9 +22,11 @@ services:
     environment:
       PORT: "3000"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/webapp"
-      CORS_ORIGIN: "http://localhost:4200"
+      # Allow the UI when accessed via laptop hostname/IP from other devices on the LAN.
+      # For local-only development this is simplest.
+      CORS_ORIGIN: "true"
     ports:
-      - "3000:3000"
+      - "0.0.0.0:3000:3000"
     depends_on:
       db:
         condition: service_healthy
@@ -38,7 +40,7 @@ services:
     build:
       context: ./frontend
     ports:
-      - "4200:80"
+      - "0.0.0.0:4200:80"
     depends_on:
       api:
         condition: service_healthy

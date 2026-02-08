@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { z } from "zod";
 import { query } from "./db.js";
 import {
@@ -13,11 +14,116 @@ export function createApp() {
   const app = express();
 
   app.use(express.json());
+  app.use(cookieParser());
   app.use(
     cors({
       origin: process.env.CORS_ORIGIN || true,
+      credentials: true,
     }),
   );
+
+  const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "session";
+
+  function setSessionCookie(res, session) {
+    // Minimal, unsigned cookie-based session.
+    // NOTE: Not secure for real apps; replace with signed cookies/JWT/bcrypt later.
+    res.cookie(SESSION_COOKIE_NAME, Buffer.from(JSON.stringify(session), "utf8").toString("base64"), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
+
+  function clearSessionCookie(res) {
+    res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+  }
+
+  function getSession(req) {
+    const raw = req.cookies?.[SESSION_COOKIE_NAME];
+    if (!raw) return null;
+    try {
+      const json = Buffer.from(String(raw), "base64").toString("utf8");
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  function requireAuth(req, res, next) {
+    const s = getSession(req);
+    if (!s?.user_id) return res.status(401).json({ error: "Unauthorized" });
+    req.session = s;
+    next();
+  }
+
+  function requireRole(role) {
+    return (req, res, next) => {
+      const s = req.session ?? getSession(req);
+      if (!s?.user_id) return res.status(401).json({ error: "Unauthorized" });
+      req.session = s;
+      if (s.role !== role) return res.status(403).json({ error: "Forbidden" });
+      next();
+    };
+  }
+
+  async function getEventByLocator(locator) {
+    const r = await query("select * from events where event_locator = $1", [locator]);
+    return r.rows[0] ?? null;
+  }
+
+  // -------------------------
+  // Auth endpoints
+  // -------------------------
+  app.get("/auth/session", (req, res) => {
+    const s = getSession(req);
+    if (!s?.user_id) return res.json({ authenticated: false });
+    res.json({ authenticated: true, user: s });
+  });
+
+  app.post("/auth/login", async (req, res, next) => {
+    try {
+      const parsed = z
+        .object({ username: z.string().min(1), password: z.string().min(1) })
+        .safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "BadRequest" });
+
+      const { username, password } = parsed.data;
+      const r = await query(
+        "select user_id, username, password_b64, role, event_id from users where username = $1",
+        [username],
+      );
+      const u = r.rows[0];
+      if (!u) return res.status(401).json({ error: "InvalidCredentials" });
+
+      const suppliedB64 = Buffer.from(password, "utf8").toString("base64");
+      if (String(u.password_b64) !== suppliedB64) return res.status(401).json({ error: "InvalidCredentials" });
+
+      let event_locator = null;
+      if (u.role === "user") {
+        const er = await query("select event_locator from events where event_id = $1", [u.event_id]);
+        event_locator = er.rows[0]?.event_locator ?? null;
+      }
+
+      const session = {
+        user_id: u.user_id,
+        username: u.username,
+        role: u.role,
+        event_id: u.event_id,
+        event_locator,
+      };
+
+      setSessionCookie(res, session);
+      res.json({ ok: true, user: session });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.post("/auth/logout", (req, res) => {
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  });
 
   app.get("/healthz", async (_req, res) => {
     try {
@@ -40,7 +146,15 @@ export function createApp() {
     return r.data;
   }
 
-  app.get("/events", async (req, res) => {
+  app.get("/events", requireAuth, async (req, res) => {
+    const s = req.session;
+
+    // Users can only see their assigned event.
+    if (s.role === "user") {
+      const r = await query("select * from events where event_id = $1", [s.event_id]);
+      return res.json(r.rows);
+    }
+
     const q = z
       .object({
         q: z.string().optional(),
@@ -76,7 +190,7 @@ export function createApp() {
     res.json(r.rows);
   });
 
-  app.post("/events", async (req, res, next) => {
+  app.post("/events", requireRole("admin"), async (req, res, next) => {
     try {
       const body = parseBody(EventCreate, req.body);
       const r = await query(
@@ -91,7 +205,7 @@ export function createApp() {
     }
   });
 
-  app.put("/events/:id", async (req, res, next) => {
+  app.put("/events/:id", requireRole("admin"), async (req, res, next) => {
     try {
       const body = parseBody(EventUpdate, req.body);
       const r = await query(
@@ -107,7 +221,7 @@ export function createApp() {
     }
   });
 
-  app.delete("/events/:id", async (req, res, next) => {
+  app.delete("/events/:id", requireRole("admin"), async (req, res, next) => {
     try {
       await query("delete from events where event_id = $1", [req.params.id]);
       res.status(204).end();
@@ -116,7 +230,9 @@ export function createApp() {
     }
   });
 
-  app.get("/bidders", async (req, res) => {
+  app.get("/bidders", requireAuth, async (req, res) => {
+    const s = req.session;
+
     const parser = z.object({
       event_id: z.coerce.number().int().positive().optional(),
       q: z.string().optional(),
@@ -131,11 +247,13 @@ export function createApp() {
 
     const { event_id, q, first_name, last_name, email } = parsed.data;
 
+    const effectiveEventId = s.role === "user" ? s.event_id : event_id;
+
     let sql = "select * from bidders where 1=1";
     const params = [];
 
-    if (event_id) {
-      params.push(event_id);
+    if (effectiveEventId) {
+      params.push(effectiveEventId);
       sql += ` and event_id = $${params.length}`;
     }
 
@@ -164,9 +282,14 @@ export function createApp() {
     res.json(r.rows);
   });
 
-  app.post("/bidders", async (req, res, next) => {
+  app.post("/bidders", requireAuth, async (req, res, next) => {
+    // Users can only create within their event.
     try {
+      const s = req.session;
       const body = parseBody(BidderCreate, req.body);
+      if (s.role === "user" && body.event_id !== s.event_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const r = await query(
         `insert into bidders
           (event_id, bidder_num, bidder_first_name, bidder_last_name, bidder_email, bidder_credit_card_token)
@@ -187,9 +310,13 @@ export function createApp() {
     }
   });
 
-  app.put("/bidders/:id", async (req, res, next) => {
+  app.put("/bidders/:id", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
       const body = parseBody(BidderUpdate, req.body);
+      if (s.role === "user" && body.event_id !== s.event_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const r = await query(
         `update bidders set
           event_id = $1, bidder_num = $2, bidder_first_name = $3,
@@ -213,8 +340,14 @@ export function createApp() {
     }
   });
 
-  app.delete("/bidders/:id", async (req, res, next) => {
+  app.delete("/bidders/:id", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
+      if (s.role === "user") {
+        const check = await query("select event_id from bidders where bidder_id = $1", [req.params.id]);
+        const row = check.rows[0];
+        if (!row || row.event_id !== s.event_id) return res.status(403).json({ error: "Forbidden" });
+      }
       await query("delete from bidders where bidder_id = $1", [req.params.id]);
       res.status(204).end();
     } catch (e) {
@@ -222,7 +355,9 @@ export function createApp() {
     }
   });
 
-  app.get("/items", async (req, res) => {
+  app.get("/items", requireAuth, async (req, res) => {
+    const s = req.session;
+
     const parser = z.object({
       event_id: z.coerce.number().int().positive().optional(),
       q: z.string().optional(),
@@ -232,11 +367,13 @@ export function createApp() {
     if (!parsed.success) return res.status(400).json({ error: "Invalid query" });
     const { event_id, q, lookup } = parsed.data;
 
+    const effectiveEventId = s.role === "user" ? s.event_id : event_id;
+
     let sql = "select * from items where 1=1";
     const params = [];
 
-    if (event_id) {
-      params.push(event_id);
+    if (effectiveEventId) {
+      params.push(effectiveEventId);
       sql += ` and event_id = $${params.length}`;
     }
 
@@ -254,9 +391,13 @@ export function createApp() {
     res.json(r.rows);
   });
 
-  app.post("/items", async (req, res, next) => {
+  app.post("/items", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
       const body = parseBody(ItemCreate, req.body);
+      if (s.role === "user" && body.event_id !== s.event_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const r = await query(
         `insert into items (event_id, item_type, item_desc, item_notes)
          values ($1,$2,$3,$4)
@@ -269,9 +410,13 @@ export function createApp() {
     }
   });
 
-  app.put("/items/:id", async (req, res, next) => {
+  app.put("/items/:id", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
       const body = parseBody(ItemUpdate, req.body);
+      if (s.role === "user" && body.event_id !== s.event_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const r = await query(
         `update items set event_id = $1, item_type = $2, item_desc = $3, item_notes = $4
          where item_id = $5
@@ -285,8 +430,14 @@ export function createApp() {
     }
   });
 
-  app.delete("/items/:id", async (req, res, next) => {
+  app.delete("/items/:id", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
+      if (s.role === "user") {
+        const check = await query("select event_id from items where item_id = $1", [req.params.id]);
+        const row = check.rows[0];
+        if (!row || row.event_id !== s.event_id) return res.status(403).json({ error: "Forbidden" });
+      }
       await query("delete from items where item_id = $1", [req.params.id]);
       res.status(204).end();
     } catch (e) {
@@ -294,12 +445,16 @@ export function createApp() {
     }
   });
 
-  app.get("/winning-bids", async (req, res) => {
+  app.get("/winning-bids", requireAuth, async (req, res) => {
+    const s = req.session;
+
     const parsed = z.object({ event_id: z.coerce.number().int().positive().optional() }).safeParse(req.query);
-    const eventId = parsed.success ? parsed.data.event_id : undefined;
+    const requestedEventId = parsed.success ? parsed.data.event_id : undefined;
+
+    const effectiveEventId = s.role === "user" ? s.event_id : requestedEventId;
 
     const r = await query(
-      eventId
+      effectiveEventId
         ? `select wb.*, b.bidder_first_name, b.bidder_last_name, i.item_desc
            from winning_bids wb
            join bidders b on b.bidder_id = wb.bidder_id
@@ -311,14 +466,18 @@ export function createApp() {
            join bidders b on b.bidder_id = wb.bidder_id
            join items i on i.item_id = wb.item_id
            order by wb.winning_bid_id desc`,
-      eventId ? [eventId] : [],
+      effectiveEventId ? [effectiveEventId] : [],
     );
     res.json(r.rows);
   });
 
-  app.post("/winning-bids", async (req, res, next) => {
+  app.post("/winning-bids", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
       const body = parseBody(WinningBidCreate, req.body);
+      if (s.role === "user" && body.event_id !== s.event_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const r = await query(
         `insert into winning_bids (event_id, bidder_id, item_id, winning_bid)
          values ($1,$2,$3,$4)
@@ -331,9 +490,13 @@ export function createApp() {
     }
   });
 
-  app.put("/winning-bids/:id", async (req, res, next) => {
+  app.put("/winning-bids/:id", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
       const body = parseBody(WinningBidUpdate, req.body);
+      if (s.role === "user" && body.event_id !== s.event_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       const r = await query(
         `update winning_bids set event_id = $1, bidder_id = $2, item_id = $3, winning_bid = $4
          where winning_bid_id = $5
@@ -347,8 +510,14 @@ export function createApp() {
     }
   });
 
-  app.delete("/winning-bids/:id", async (req, res, next) => {
+  app.delete("/winning-bids/:id", requireAuth, async (req, res, next) => {
     try {
+      const s = req.session;
+      if (s.role === "user") {
+        const check = await query("select event_id from winning_bids where winning_bid_id = $1", [req.params.id]);
+        const row = check.rows[0];
+        if (!row || row.event_id !== s.event_id) return res.status(403).json({ error: "Forbidden" });
+      }
       await query("delete from winning_bids where winning_bid_id = $1", [req.params.id]);
       res.status(204).end();
     } catch (e) {

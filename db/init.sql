@@ -74,6 +74,21 @@ CREATE TABLE IF NOT EXISTS winning_bids (
     CHECK (winning_bid >= 0)
 );
 
+-- ------------------------------------------------------------
+-- USERS (very simple auth; WIP)
+-- Passwords are stored as BASE64 (NOT secure; placeholders only).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+  user_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  username           VARCHAR(50) NOT NULL UNIQUE,
+  password_b64       VARCHAR(200) NOT NULL,
+  role               VARCHAR(10) NOT NULL,
+  event_id           INT,
+
+  CONSTRAINT chk_users_role CHECK (role IN ('admin', 'user')),
+  CONSTRAINT fk_users_event FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE SET NULL
+);
+
 -- Helpful indexes for FK lookups
 CREATE INDEX IF NOT EXISTS ix_bidders_event_id ON bidders(event_id);
 CREATE INDEX IF NOT EXISTS ix_items_event_id ON items(event_id);
@@ -120,5 +135,15 @@ VALUES
   (1, 2, 1, 1250.00),
   (2, 4, 3, 980.00),
   (3, 6, 5, 1430.00);
+
+-- App users
+-- admin/admin => "YWRtaW4="
+-- pass => "cGFzcw=="
+INSERT INTO users (username, password_b64, role, event_id)
+VALUES
+  ('admin', 'YWRtaW4=', 'admin', NULL),
+  ('user1', 'cGFzcw==', 'user', 1),
+  ('user2', 'cGFzcw==', 'user', 2),
+  ('user3', 'cGFzcw==', 'user', 3);
 
 COMMIT;

@@ -34,3 +34,17 @@ export type WinningBidRow = {
     bidder_last_name?: string;
     item_desc?: string;
 };
+
+export type SessionUser = {
+    user_id: number;
+    username: string;
+    role: 'admin' | 'user';
+    event_id: number | null;
+    event_locator: string | null;
+};
+
+export type SessionResponse =
+    | { authenticated: false }
+    | { authenticated: true; user: SessionUser };
+
+export type LoginResponse = { ok: true; user: SessionUser };
