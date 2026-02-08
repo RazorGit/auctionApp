@@ -4,8 +4,14 @@ docker compose up -d --build
 ```
 
 Then open:
-UI: http://localhost:4200
-API health: http://localhost:4200/api/healthz (via nginx proxy)
+- Landing: http://localhost:4200
+- Admin UI: http://localhost:4200/admin
+- User UI (event dashboard): http://localhost:4200/user/<EVENT_LOCATOR>
+- API health: http://localhost:4200/api/healthz (via nginx proxy)
+
+How to get an EVENT_LOCATOR:
+- In the Admin UI, go to Events and copy the `event_locator` column.
+- Or via API: `curl -sS http://localhost:4200/api/events`
 
 docker-compose.yml: brings up
 Postgres (db) with your db/init.sql
@@ -19,10 +25,10 @@ Backend (backend/): Express + pg + zod with endpoints:
 + GET/POST /items (optional ?event_id=...)
 + GET/POST /winning-bids (optional ?event_id=..., includes joined bidder/item fields on GET)
 
-Frontend (frontend/): Angular dashboard for:
-+ creating/listing events
-+ selecting an event and adding/listing bidders + items
-+ recording/listing winning bids
+Frontend (frontend/): Angular UI
+- Landing page: choose Admin or open User UI by event locator
+- Admin: manage events/bidders/items/winning bids
+- User: event dashboard based on `event_locator`
 
 # Example - Events
 ```

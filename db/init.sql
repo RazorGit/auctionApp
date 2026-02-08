@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS bidders (
   bidder_credit_card_token  VARCHAR(100),
 
   CONSTRAINT fk_bidders_event
-    FOREIGN KEY (event_id) REFERENCES events (event_id)
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE
 );
 
 -- bidder_num: "sequential within event" (spec) when provided.
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS items (
   item_notes   VARCHAR(100),
 
   CONSTRAINT fk_items_event
-    FOREIGN KEY (event_id) REFERENCES events (event_id),
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE,
   CONSTRAINT chk_items_type
     CHECK (item_type IN ('Live', 'Not Live'))
 );
@@ -64,12 +64,12 @@ CREATE TABLE IF NOT EXISTS winning_bids (
   winning_bid     NUMERIC(10,2) NOT NULL,
 
   CONSTRAINT fk_winning_bids_event
-    FOREIGN KEY (event_id) REFERENCES events (event_id),
+    FOREIGN KEY (event_id) REFERENCES events (event_id) ON DELETE CASCADE,
   -- Spec has typos here; these should reference bidders/items, not events.
   CONSTRAINT fk_winning_bids_bidder
-    FOREIGN KEY (bidder_id) REFERENCES bidders (bidder_id),
+    FOREIGN KEY (bidder_id) REFERENCES bidders (bidder_id) ON DELETE CASCADE,
   CONSTRAINT fk_winning_bids_item
-    FOREIGN KEY (item_id) REFERENCES items (item_id),
+    FOREIGN KEY (item_id) REFERENCES items (item_id) ON DELETE CASCADE,
   CONSTRAINT chk_winning_bid_nonnegative
     CHECK (winning_bid >= 0)
 );
@@ -80,5 +80,45 @@ CREATE INDEX IF NOT EXISTS ix_items_event_id ON items(event_id);
 CREATE INDEX IF NOT EXISTS ix_winning_bids_event_id ON winning_bids(event_id);
 CREATE INDEX IF NOT EXISTS ix_winning_bids_bidder_id ON winning_bids(bidder_id);
 CREATE INDEX IF NOT EXISTS ix_winning_bids_item_id ON winning_bids(item_id);
+
+-- ------------------------------------------------------------
+-- Seed data (demo)
+-- NOTE: This runs only on a fresh DB volume.
+-- ------------------------------------------------------------
+
+-- 3 demo events
+INSERT INTO events (event_desc, event_date, event_tax_id)
+VALUES
+  ('Chinese Ming Vase Benefit Auction', DATE '2026-03-22', NULL),
+  ('Dinosaur Fossil Fundraiser Night',  DATE '2026-04-05', NULL),
+  ('Meteorite Fragment Charity Gala',   DATE '2026-04-19', NULL);
+
+-- Bidders (a couple per event)
+INSERT INTO bidders (event_id, bidder_num, bidder_first_name, bidder_last_name, bidder_email, bidder_credit_card_token)
+VALUES
+  (1, 101, 'Aria',   'Chen',     'aria.chen@example.com',     NULL),
+  (1, 102, 'Miles',  'Harrington','miles.h@example.com',      NULL),
+  (2, 201, 'Nora',   'Gomez',    'nora.gomez@example.com',    NULL),
+  (2, 202, 'Theo',   'Kline',    'theo.kline@example.com',    NULL),
+  (3, 301, 'Sam',    'Okoye',    'sam.okoye@example.com',     NULL),
+  (3, 302, 'Priya',  'Iyer',     'priya.iyer@example.com',    NULL);
+
+-- Items (one headline item per event + a couple extras)
+INSERT INTO items (event_id, item_type, item_desc, item_notes)
+VALUES
+  (1, 'Live',     'Porcelain Ming Dynasty Vase (replica)', 'Decorative reproduction for demo purposes'),
+  (1, 'Not Live', 'Tea ceremony set',                      'Includes teapot + 4 cups'),
+  (2, 'Live',     'Dinosaur Fossil: "Raptor" claw cast', 'Museum-quality cast (demo)'),
+  (2, 'Not Live', 'Prehistoric plant print',               'Framed'),
+  (3, 'Live',     'Meteorite Fragment (Campo del Cielo)',  'Small iron meteorite slice (demo)'),
+  (3, 'Not Live', 'Star map print',                        'Personalized to the event date');
+
+-- Winning bids (one per event)
+-- Bidder/item IDs are deterministic here because this is demo seed data in a fresh DB.
+INSERT INTO winning_bids (event_id, bidder_id, item_id, winning_bid)
+VALUES
+  (1, 2, 1, 1250.00),
+  (2, 4, 3, 980.00),
+  (3, 6, 5, 1430.00);
 
 COMMIT;

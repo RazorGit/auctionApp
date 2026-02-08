@@ -2,6 +2,11 @@ import { Routes } from "@angular/router";
 
 export const routes: Routes = [
     {
+        path: "",
+        loadComponent: () => import("./landing.component").then(m => m.LandingComponent),
+        pathMatch: "full",
+    },
+    {
         path: "admin",
         loadComponent: () => import("./admin-dashboard.component").then(m => m.AdminDashboardComponent),
     },
@@ -25,6 +30,5 @@ export const routes: Routes = [
         path: "winning-bids",
         loadComponent: () => import("./winning-bids/winning-bid-form.component").then(m => m.WinningBidFormComponent),
     },
-    { path: "", redirectTo: "admin", pathMatch: "full" },
-    { path: "**", redirectTo: "admin" },
+    { path: "**", redirectTo: "" },
 ];
