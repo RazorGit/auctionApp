@@ -177,12 +177,6 @@ export function createApp() {
   app.get("/events", requireAuth, async (req, res) => {
     const s = req.session;
 
-    // Users can only see their assigned event.
-    if (s.role === "user") {
-      const r = await query("select * from events where event_id = $1", [s.event_id]);
-      return res.json(r.rows);
-    }
-
     const q = z
       .object({
         q: z.string().optional(),
@@ -193,6 +187,66 @@ export function createApp() {
     if (!q.success) return res.status(400).json({ error: "Invalid query params" });
     const { q: search, lookup } = q.data;
 
+    // Users can only see events they have approved memberships for.
+    if (s.role === "user") {
+      if (lookup) {
+        // User is trying to access a specific event by locator.
+        // Check if they have an approved membership for it.
+        const cleanLookup = lookup.trim().toUpperCase();
+        let eventSql = "select * from events where 1=1";
+        const eventParams = [];
+
+        if (cleanLookup.length === 8 && /^[0-9A-F]+$/.test(cleanLookup)) {
+          eventSql += " and event_locator = $1";
+          eventParams.push(cleanLookup);
+        } else {
+          eventSql += " and upper(replace(event_desc, ' ', '')) = upper(replace($1, ' ', ''))";
+          eventParams.push(lookup);
+        }
+
+        const eventResult = await query(eventSql, eventParams);
+        const event = eventResult.rows[0];
+
+        if (!event) {
+          return res.json([]);
+        }
+
+        // Check membership
+        const memberResult = await query(
+          "select status from event_memberships where user_id = $1 and event_id = $2",
+          [s.user_id, event.event_id],
+        );
+        const membership = memberResult.rows[0];
+
+        if (membership?.status === 'approved') {
+          return res.json([event]);
+        } else {
+          return res.status(403).json({ error: "You are not approved for this event" });
+        }
+      } else if (search) {
+        // User search: filter to only their approved events
+        const r = await query(
+          `select e.* from events e
+           join event_memberships m on e.event_id = m.event_id
+           where m.user_id = $1 and m.status = 'approved' and e.event_desc ilike $2
+           order by e.event_date desc, e.event_id desc`,
+          [s.user_id, `%${search}%`],
+        );
+        return res.json(r.rows);
+      } else {
+        // No lookup/search: return all approved events for user
+        const r = await query(
+          `select e.* from events e
+           join event_memberships m on e.event_id = m.event_id
+           where m.user_id = $1 and m.status = 'approved'
+           order by e.event_date desc, e.event_id desc`,
+          [s.user_id],
+        );
+        return res.json(r.rows);
+      }
+    }
+
+    // Admin can see all events
     let sql = "select * from events";
     const params = [];
 

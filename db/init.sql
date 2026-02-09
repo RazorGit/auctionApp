@@ -202,14 +202,20 @@ FROM events e
 JOIN users u ON u.role = 'user'
 WHERE e.event_id IN (1,2);
 
+-- Also approve user1 and user2 for event 3 (ongoing auction)
+INSERT INTO event_memberships (event_id, user_id, status, requested_at, decided_at, decided_by_user_id)
+SELECT 3, u.user_id, 'approved', now(), now(), (SELECT user_id FROM users WHERE username = 'admin')
+FROM users u
+WHERE u.username IN ('user1', 'user2');
+
 -- Mark event 1 and 2 as ended so admin can view bid history.
 UPDATE events
 SET status = 'ended', starts_at = now() - interval '25 minutes', ends_at = now() - interval '5 minutes', time_limit_seconds = 1200
 WHERE event_id IN (1,2);
 
--- Keep event 3 scheduled for live demo
+-- Set event 3 as ongoing for live demo (will end in 30 minutes)
 UPDATE events
-SET status = 'scheduled', starts_at = NULL, ends_at = NULL, time_limit_seconds = NULL
+SET status = 'ongoing', starts_at = now(), ends_at = now() + interval '30 minutes', time_limit_seconds = 1800
 WHERE event_id = 3;
 
 -- Simulate bidding wars on the two Live items (item_id 1 for event 1, item_id 3 for event 2)
